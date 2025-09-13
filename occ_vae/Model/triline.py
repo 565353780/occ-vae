@@ -1,69 +1,70 @@
 import torch
-import torch.nn as nn
+from typing import Union
+
+from occ_vae.Method.position import deltas_to_positions
 
 
-class Triline(nn.Module):
-    def __init__(self, N: int, C: int):
-        """
-        Args:
-            N: 每条轴上的特征点数量
-            C: 每个点的特征维度
-        """
-        super().__init__()
-        self.N = N
-        self.C = C
+class Triline(object):
+    def __init__(
+        self,
+        feats: torch.Tensor,  # [B, 3, feat_num, feat_dim]
+        deltas: Union[torch.Tensor, None] = None,  # [B, 3, feat_num - 1]
+    ) -> None:
+        self.feats = feats
 
-        # 初始化：X, Y, Z 三条轴，每条 N 个特征点，每个点是 C 维特征
-        self.x_line = nn.Parameter(torch.randn(N, C))
-        self.y_line = nn.Parameter(torch.randn(N, C))
-        self.z_line = nn.Parameter(torch.randn(N, C))
-
-        # 构建位置坐标 [-0.5, 0.5] 上的 N 个位置
-        self.register_buffer("grid", torch.linspace(-0.5, 0.5, N))
+        if deltas is None:
+            deltas = torch.zeros(feats.shape[0], feats.shape[1], feats.shape[2] - 1).to(
+                feats.device, dtype=feats.dtype
+            )
+        self.positions = deltas_to_positions(deltas)
         return
 
-    def interpolate_1d(self, line_feat: torch.Tensor, coord: torch.Tensor):
+    def query(self, coords: torch.Tensor) -> torch.Tensor:
         """
-        在给定的一维特征线上，对 coord 位置进行线性插值。
+        feats: [B, 3, feat_num, feat_dim]
+        positions: [B, 3, feat_num], positions along each axis, sorted ascending in [-0.5, 0.5]
+        coords: [B, M, 3], query points in [-0.5, 0.5]
 
-        Args:
-            line_feat: [N, C]
-            coord: [B] 取值范围 [-0.5, 0.5]
-        Returns:
-            interpolated_feat: [B, C]
+        returns:
+        features: [B, M, 3, feat_dim]  # 三个轴的插值特征分别保留
         """
-        N = line_feat.shape[0]
+        B, _, feat_num, feat_dim = self.feats.shape
+        _, M, _ = coords.shape
 
-        # 将 coord 映射到 grid 的索引区间
-        pos = (coord - self.grid[0]) / (self.grid[1] - self.grid[0])  # → [0, N-1]
-        idx0 = torch.clamp(pos.floor().long(), 0, N - 2)  # 左边界索引
-        idx1 = idx0 + 1  # 右边界索引
-        w1 = (pos - idx0.float()).unsqueeze(1)  # 插值权重
-        w0 = 1.0 - w1
+        # 把B和3轴维度合并，方便searchsorted和gather同时做
+        feats_reshape = self.feats.view(
+            B * 3, feat_num, feat_dim
+        )  # [B*3, feat_num, feat_dim]
+        positions_reshape = self.positions.view(B * 3, feat_num)  # [B*3, feat_num]
+        coords_reshape = coords.permute(0, 2, 1).reshape(
+            B * 3, M
+        )  # [B*3, M]，把轴维放在batch维合并
 
-        # 获取两个点的特征值
-        f0 = line_feat[idx0]  # [B, C]
-        f1 = line_feat[idx1]  # [B, C]
+        # searchsorted
+        idx = torch.searchsorted(
+            positions_reshape, coords_reshape, right=True
+        )  # [B*3, M]
+        idx = idx.clamp(1, feat_num - 1)
 
-        # 插值
-        return f0 * w0 + f1 * w1
+        idx0 = idx - 1
+        idx1 = idx
 
-    def forward(self, coords: torch.Tensor, mode="sum"):
-        """
-        Args:
-            coords: [B, 3]，每一行是 (x, y, z)，范围必须在 [-0.5, 0.5]
-            mode: 如何组合三个方向的特征，支持 'sum'、'concat'
-        Returns:
-            feat: [B, C] 或 [B, 3*C]
-        """
-        x, y, z = coords[:, 0], coords[:, 1], coords[:, 2]
-        fx = self.interpolate_1d(self.x_line, x)
-        fy = self.interpolate_1d(self.y_line, y)
-        fz = self.interpolate_1d(self.z_line, z)
+        # gather indices 扩展
+        idx0_exp = idx0.unsqueeze(-1).expand(-1, -1, feat_dim)  # [B*3, M, feat_dim]
+        idx1_exp = idx1.unsqueeze(-1).expand(-1, -1, feat_dim)
 
-        if mode == "sum":
-            return fx + fy + fz  # [B, C]
-        elif mode == "concat":
-            return torch.cat([fx, fy, fz], dim=-1)  # [B, 3*C]
-        else:
-            raise ValueError(f"Unknown mode: {mode}")
+        feat0 = torch.gather(feats_reshape, 1, idx0_exp)  # [B*3, M, feat_dim]
+        feat1 = torch.gather(feats_reshape, 1, idx1_exp)  # [B*3, M, feat_dim]
+
+        idx0_pos = torch.gather(positions_reshape, 1, idx0)  # [B*3, M]
+        idx1_pos = torch.gather(positions_reshape, 1, idx1)  # [B*3, M]
+
+        weight = (coords_reshape - idx0_pos) / (idx1_pos - idx0_pos + 1e-8)  # [B*3, M]
+        weight = weight.unsqueeze(-1)  # [B*3, M, 1]
+
+        feat_interp = feat0 * (1 - weight) + feat1 * weight  # [B*3, M, feat_dim]
+
+        # 还原回 [B, 3, M, feat_dim] 再permute成 [B, M, 3, feat_dim]
+        feat_interp = feat_interp.view(B, 3, M, feat_dim).permute(0, 2, 1, 3)
+
+        return feat_interp
