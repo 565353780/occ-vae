@@ -3,4 +3,4 @@ from occ_vae.Test.model import test as test_model
 
 if __name__ == "__main__":
     test_triline()
-    # test_model()
+    test_model()
