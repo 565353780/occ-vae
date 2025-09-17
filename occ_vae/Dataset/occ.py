@@ -93,7 +93,7 @@ class OccDataset(Dataset):
         self.query_idxs[index] += 1
 
         data = {
-            "occ": occ,
+            "occ": torch.from_numpy(occ).float(),
         }
 
         return data

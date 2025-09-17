@@ -29,6 +29,6 @@ def make_occ_centers(
     )  # [dim, dim, dim]
 
     # 拼接并 reshape 为 [dim^3, 3]
-    centers = torch.stack([x, y, z], dim=-1).reshape(-1, 3)  # [dim³, 3]
+    centers = torch.stack([x, y, z], dim=-1)  # [dim, dim, dim, 3]
 
-    return centers  # 或 reshape(dim, dim, dim, 3)
+    return centers
