@@ -114,7 +114,7 @@ class Trainer(BaseTrainer):
         kl = result_dict["kl"]
 
         gt_occ = gt_occ.reshape(gt_occ.shape[0], -1)
-        loss_occ = self.loss_fn(gt_occ, pred_occ)
+        loss_occ = self.loss_fn(pred_occ, gt_occ)
 
         loss_kl = torch.mean(kl)
 
