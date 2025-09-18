@@ -1,5 +1,6 @@
 import sys
 
+sys.path.append("../point-cept")
 sys.path.append("../octree-shape")
 sys.path.append("../base-trainer/")
 

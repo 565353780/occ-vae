@@ -4,7 +4,7 @@ from typing import Union
 
 from base_trainer.Module.base_trainer import BaseTrainer
 
-from occ_vae.Dataset.occ import OccDataset
+from occ_vae.Dataset.shape_code import ShapeCodeDataset
 from occ_vae.Model.triline_vae import TrilineVAE
 
 
@@ -36,10 +36,8 @@ class Trainer(BaseTrainer):
     ) -> None:
         self.dataset_root_folder_path = dataset_root_folder_path
 
-        self.max_length = 8192
-
         self.occ_size = 128
-        self.feat_num = 512
+        self.feat_num = 64
         self.feat_dim = 32
 
         self.gt_sample_added_to_logger = False
@@ -74,10 +72,9 @@ class Trainer(BaseTrainer):
     def createDatasets(self) -> bool:
         eval = True
         self.dataloader_dict["dino"] = {
-            "dataset": OccDataset(
+            "dataset": ShapeCodeDataset(
                 self.dataset_root_folder_path,
-                "Objaverse_82K/mesh",
-                subdiv_depth=0,
+                "Objaverse_82K/shape_code",
                 occ_depth=7,
                 split="train",
                 dtype=self.dtype,
@@ -87,10 +84,9 @@ class Trainer(BaseTrainer):
 
         if eval:
             self.dataloader_dict["eval"] = {
-                "dataset": OccDataset(
+                "dataset": ShapeCodeDataset(
                     self.dataset_root_folder_path,
-                    "Objaverse_82K/mesh",
-                    subdiv_depth=0,
+                    "Objaverse_82K/shape_code",
                     occ_depth=7,
                     split="eval",
                     dtype=self.dtype,
