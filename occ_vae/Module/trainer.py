@@ -113,16 +113,29 @@ class Trainer(BaseTrainer):
         pred_occ = result_dict["occ"]
         kl = result_dict["kl"]
 
-        gt_occ = gt_occ.reshape(gt_occ.shape[0], -1)
-        loss_occ = self.loss_fn(pred_occ, gt_occ)
+        gt_occ = gt_occ.reshape(-1)
+        pred_occ = pred_occ.reshape(-1)
+
+        positive_occ_idxs = torch.where(gt_occ == 1)
+        zero_occ_idxs = torch.where(gt_occ == 0)
+
+        positive_gt_occ = gt_occ[positive_occ_idxs]
+        positive_pred_occ = pred_occ[positive_occ_idxs]
+
+        zero_gt_occ = gt_occ[zero_occ_idxs]
+        zero_pred_occ = pred_occ[zero_occ_idxs]
+
+        loss_positive_occ = self.loss_fn(positive_pred_occ, positive_gt_occ)
+        loss_zero_occ = self.loss_fn(zero_pred_occ, zero_gt_occ)
 
         loss_kl = torch.mean(kl)
 
-        loss = loss_occ + loss_kl
+        loss = loss_positive_occ + loss_zero_occ + loss_kl
 
         loss_dict = {
             "Loss": loss,
-            "LossOcc": loss_occ,
+            "LossPositiveOcc": loss_positive_occ,
+            "LossZeroOcc": loss_zero_occ,
             "LossKL": loss_kl,
         }
 
