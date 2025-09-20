@@ -1,6 +1,7 @@
 import sys
 
 sys.path.append("../octree-shape")
+sys.path.append("../point-cept")
 
 import os
 import torch
@@ -11,7 +12,7 @@ from occ_vae.Module.detector import Detector
 def demo():
     model_file_path = "./output/v2/model_last.pth"
     use_ema = False
-    device = "cpu"
+    device = "cuda"
     dtype = torch.float32
 
     mesh_file_path = os.environ["HOME"] + "/chLi/Dataset/vae-eval/mesh/002.obj"
