@@ -15,11 +15,11 @@ def demo():
     assert dataset_root_folder_path is not None
     print(dataset_root_folder_path)
 
-    batch_size = 3
-    accum_iter = 22
+    batch_size = 2
+    accum_iter = 32
     num_workers = 16
-    model_file_path = "./output/hy3d_160epoch/model_last.pth"
-    model_file_path = None
+    model_file_path = "./output/v1/model_last.pth"
+    # model_file_path = None
     weights_only = False
     device = "auto"
     dtype = torch.float32
