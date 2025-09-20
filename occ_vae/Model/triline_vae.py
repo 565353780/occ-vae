@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from math import ceil
+from typing import Tuple
 
 from pointcept.models.point_transformer_v3.point_transformer_v3m2_sonata import (
     PointTransformerV3,
@@ -79,7 +80,9 @@ class TrilineVAE(nn.Module):
         self.query_coords = make_occ_centers(occ_size)
         return
 
-    def encode(self, occ: torch.Tensor, deterministic: bool = False):
+    def encode(
+        self, occ: torch.Tensor, deterministic: bool = False
+    ) -> Tuple[Triline, torch.Tensor]:
         if self.query_coords.device != occ.device:
             self.query_coords = self.query_coords.to(occ.device)
 
@@ -110,18 +113,6 @@ class TrilineVAE(nn.Module):
 
         x = posterior.sample()
         kl = posterior.kl()
-        return x, kl
-
-    def decode(self, triline, coords):
-        feat = triline.query(coords)
-        feat = feat.reshape(feat.shape[:-2] + (feat.shape[-2] * feat.shape[-1],))
-        occ_logits = self.decoder(feat).squeeze(-1)
-        return occ_logits
-
-    def forward(self, data_dict: dict) -> dict:
-        occ = data_dict["occ"]
-
-        x, kl = self.encode(occ)
 
         feats = x[..., :-1]
         deltas = x[..., -1]
@@ -130,19 +121,43 @@ class TrilineVAE(nn.Module):
 
         triline = Triline(feats, deltas)
 
+        return triline, kl
+
+    def decode(self, triline: Triline, coords: torch.Tensor) -> torch.Tensor:
+        feat = triline.query(coords)
+        feat = feat.reshape(feat.shape[:-2] + (feat.shape[-2] * feat.shape[-1],))
+        occ_logits = self.decoder(feat).squeeze(-1)
+        return occ_logits
+
+    def decodeLarge(
+        self, triline: Triline, coords: torch.Tensor, query_step_size: int = 100000
+    ) -> torch.Tensor:
+        if coords.shape[1] <= query_step_size:
+            return self.decode(triline, coords)
+
+        logits = []
+        for block_idx in range(ceil(coords.shape[1] / query_step_size)):
+            curr_logits = self.decode(
+                triline,
+                coords[
+                    :,
+                    block_idx * query_step_size : (block_idx + 1) * query_step_size,
+                    :,
+                ],
+            )
+            logits.append(curr_logits)
+        logits = torch.cat(logits, dim=1)
+
+        return logits
+
+    def forward(self, data_dict: dict) -> dict:
+        occ = data_dict["occ"]
+
+        triline, kl = self.encode(occ)
+
         query_coords = self.query_coords.view(1, -1, 3).expand(occ.shape[0], -1, -1)
 
-        N = 100000
-        if query_coords.shape[1] > N:
-            logits = []
-            for block_idx in range(ceil(query_coords.shape[1] / N)):
-                curr_logits = self.decode(
-                    triline, query_coords[:, block_idx * N : (block_idx + 1) * N, :]
-                )
-                logits.append(curr_logits)
-            logits = torch.cat(logits, dim=1)
-        else:
-            logits = self.decode(triline, query_coords)
+        logits = self.decodeLarge(triline, query_coords)
 
         result_dict = {
             "occ": logits,
