@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append("../octree-shape")
+
 import os
 import torch
 
