@@ -15,7 +15,7 @@ def demo():
     device = "cuda"
     dtype = torch.float32
 
-    mesh_file_path = os.environ["HOME"] + "/chLi/Dataset/vae-eval/mesh/002.obj"
+    mesh_file_path = os.environ["HOME"] + "/chLi/Dataset/Famous/bunny-v2.ply"
 
     detector = Detector(
         model_file_path,

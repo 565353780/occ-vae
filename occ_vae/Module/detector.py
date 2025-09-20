@@ -2,6 +2,7 @@ import os
 import torch
 from typing import Union
 
+from occ_vae.Method import occ
 from octree_shape.Module.octree_builder import OctreeBuilder
 from octree_shape.Method.occ import toOccCenters
 from octree_shape.Method.render import renderBoxCentersMesh
@@ -110,8 +111,10 @@ class Detector(object):
         return triline
 
     def renderTriline(self, triline: Triline) -> bool:
-        pred_occ = self.model.decodeLarge(triline, self.query_coords)
-        centers = toOccCenters(pred_occ)
+        occ_size = 2**self.depth_max
+        pred_occ = self.model.decodeLarge(triline, self.query_coords) > 0.5
+        occ_array = pred_occ.view(occ_size, occ_size, occ_size).detach().cpu().numpy()
+        centers = toOccCenters(occ_array)
         length = 0.5**self.depth_max
         renderBoxCentersMesh(centers, length)
         return True
