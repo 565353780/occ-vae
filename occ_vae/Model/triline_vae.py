@@ -10,6 +10,7 @@ from pointcept.models.point_transformer_v3.point_transformer_v3m2_sonata import 
 from occ_vae.Model.triline import Triline
 from occ_vae.Model.point_embed import PointEmbed
 from occ_vae.Model.query_fusion import QueryFusion
+from occ_vae.Model.occ_decoder import OccDecoder
 from occ_vae.Model.diagonal_gaussian_distribution import DiagonalGaussianDistribution
 from occ_vae.Method.occ import make_occ_centers
 
@@ -71,10 +72,13 @@ class TrilineVAE(nn.Module):
         )
 
         # Decoder MLP
-        self.decoder = nn.Sequential(
-            nn.Linear(feat_dim * 3, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1),
+        self.decoder = OccDecoder(
+            feat_dim=feat_dim,
+            hidden_dim=32,
+            num_layers=5,
+            use_xyz=False,
+            use_posenc=False,
+            posenc_freq=10,
         )
 
         self.query_coords = make_occ_centers(occ_size)
