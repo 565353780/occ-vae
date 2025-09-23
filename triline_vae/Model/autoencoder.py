@@ -3,12 +3,14 @@ import torch
 from torch import nn
 from typing import Tuple
 
-from occ_vae.Model.utils import PreNorm, Attention, FeedForward, subsample
-from occ_vae.Model.utils import PointEmbed
-from occ_vae.Model.bottleneck import NormalizedBottleneck
-from occ_vae.Model.triline import Triline
-from occ_vae.Model.diagonal_gaussian_distribution import DiagonalGaussianDistribution
-from occ_vae.Method.occ import make_occ_centers
+from triline_vae.Model.utils import PreNorm, Attention, FeedForward, subsample
+from triline_vae.Model.utils import PointEmbed
+from triline_vae.Model.bottleneck import NormalizedBottleneck
+from triline_vae.Model.triline import Triline
+from triline_vae.Model.diagonal_gaussian_distribution import (
+    DiagonalGaussianDistribution,
+)
+from triline_vae.Method.occ import make_occ_centers
 
 
 def extract_fixed_size_pointcloud(occ, query_coords, target_N):

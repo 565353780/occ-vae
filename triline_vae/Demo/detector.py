@@ -6,7 +6,7 @@ sys.path.append("../point-cept")
 import os
 import torch
 
-from occ_vae.Module.detector import Detector
+from triline_vae.Module.detector import Detector
 
 
 def demo():

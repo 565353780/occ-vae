@@ -1,10 +1,10 @@
 cd ..
-git clone https://github.com/565353780/octree-shape.git
+git clone https://github.com/565353780/sdf-generate.git
 git clone https://github.com/565353780/data-convert.git
 git clone https://github.com/565353780/base-trainer.git
 git clone https://github.com/565353780/point-cept.git
 
-cd octree-shape
+cd sdf-generate
 ./setup.sh
 
 cd ../data-convert

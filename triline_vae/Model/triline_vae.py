@@ -7,12 +7,14 @@ from pointcept.models.point_transformer_v3.point_transformer_v3m2_sonata import 
     PointTransformerV3,
 )
 
-from occ_vae.Model.triline import Triline
-from occ_vae.Model.point_embed import PointEmbed
-from occ_vae.Model.query_fusion import QueryFusion
-from occ_vae.Model.occ_decoder import OccDecoder
-from occ_vae.Model.diagonal_gaussian_distribution import DiagonalGaussianDistribution
-from occ_vae.Method.occ import make_occ_centers
+from triline_vae.Model.triline import Triline
+from triline_vae.Model.point_embed import PointEmbed
+from triline_vae.Model.query_fusion import QueryFusion
+from triline_vae.Model.occ_decoder import OccDecoder
+from triline_vae.Model.diagonal_gaussian_distribution import (
+    DiagonalGaussianDistribution,
+)
+from triline_vae.Method.occ import make_occ_centers
 
 
 def occ_to_pts(occ: torch.Tensor, centers: torch.Tensor):

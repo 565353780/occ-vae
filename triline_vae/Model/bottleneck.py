@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
 
-from occ_vae.Model.utils import DiagonalGaussianDistribution
+from triline_vae.Model.diagonal_gaussian_distribution import (
+    DiagonalGaussianDistribution,
+)
 
 
 class Bottleneck(nn.Module):

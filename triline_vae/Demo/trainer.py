@@ -7,7 +7,7 @@ sys.path.append("../base-trainer/")
 import os
 import torch
 
-from occ_vae.Module.trainer import Trainer
+from triline_vae.Module.trainer import Trainer
 
 
 def demo():
@@ -19,7 +19,7 @@ def demo():
     accum_iter = 32
     num_workers = 16
     model_file_path = "./output/v1/model_last.pth"
-    # model_file_path = None
+    model_file_path = None
     weights_only = False
     device = "auto"
     dtype = torch.float32

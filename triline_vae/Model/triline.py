@@ -1,7 +1,7 @@
 import torch
 from typing import Union
 
-from occ_vae.Method.position import deltas_to_positions
+from triline_vae.Method.position import deltas_to_positions
 
 
 class Triline(object):

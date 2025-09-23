@@ -2,7 +2,6 @@ import os
 import torch
 from typing import Union
 
-from occ_vae.Method import occ
 from octree_shape.Module.octree_builder import OctreeBuilder
 from octree_shape.Method.occ import toOccCenters
 from octree_shape.Method.render import renderBoxCentersMesh
