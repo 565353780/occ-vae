@@ -12,7 +12,7 @@ def test():
         "train",
         [21384, 10000, 10000],
     )
-    dataloader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=0)
+    dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=0)
 
     model = TrilineVAEV2().cuda()
 
@@ -28,7 +28,6 @@ def test():
 
         for key, item in result.items():
             print(key, ":", item.shape)
-
-        break
+            break
 
     return True

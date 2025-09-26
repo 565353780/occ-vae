@@ -18,6 +18,7 @@ def demo():
     batch_size = 8
     accum_iter = 32
     num_workers = min(16, batch_size)
+    num_workers = 1
     model_file_path = "./output/v1/model_last.pth"
     model_file_path = None
     weights_only = False
