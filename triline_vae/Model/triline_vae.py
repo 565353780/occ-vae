@@ -14,7 +14,7 @@ from triline_vae.Model.occ_decoder import OccDecoder
 from triline_vae.Model.diagonal_gaussian_distribution import (
     DiagonalGaussianDistribution,
 )
-from triline_vae.Method.occ import make_occ_centers
+# from triline_vae.Method.occ import make_occ_centers
 
 
 def occ_to_pts(occ: torch.Tensor, centers: torch.Tensor):

@@ -4,8 +4,8 @@ from typing import Union
 
 from base_trainer.Module.base_trainer import BaseTrainer
 
-from occ_vae.Dataset.shape_code import ShapeCodeDataset
-from occ_vae.Model.triline_vae import TrilineVAE
+from triline_vae.Dataset.tsdf import TSDFDataset
+from triline_vae.Model.triline_vae_v2 import TrilineVAEV2
 
 
 class Trainer(BaseTrainer):
@@ -42,7 +42,7 @@ class Trainer(BaseTrainer):
 
         self.gt_sample_added_to_logger = False
 
-        self.loss_fn = nn.BCEWithLogitsLoss()
+        self.loss_fn = nn.MSELoss()
 
         super().__init__(
             batch_size,
@@ -71,25 +71,23 @@ class Trainer(BaseTrainer):
 
     def createDatasets(self) -> bool:
         eval = True
-        self.dataloader_dict["dino"] = {
-            "dataset": ShapeCodeDataset(
+        self.dataloader_dict["tsdf"] = {
+            "dataset": TSDFDataset(
                 self.dataset_root_folder_path,
-                "Objaverse_82K/shape_code",
-                occ_depth=7,
+                "Objaverse_82K/sharp_edge_sdf",
                 split="train",
-                dtype=self.dtype,
+                n_supervision=[21384, 10000, 10000],
             ),
             "repeat_num": 1,
         }
 
         if eval:
             self.dataloader_dict["eval"] = {
-                "dataset": ShapeCodeDataset(
+                "dataset": TSDFDataset(
                     self.dataset_root_folder_path,
-                    "Objaverse_82K/shape_code",
-                    occ_depth=7,
-                    split="eval",
-                    dtype=self.dtype,
+                    "Objaverse_82K/sharp_edge_sdf",
+                    split="val",
+                    n_supervision=[21384, 10000, 10000],
                 ),
             }
 
@@ -101,48 +99,90 @@ class Trainer(BaseTrainer):
         return True
 
     def createModel(self) -> bool:
-        self.model = TrilineVAE(
-            occ_size=self.occ_size,
-            feat_num=self.feat_num,
-            feat_dim=self.feat_dim,
-        ).to(self.device, dtype=self.dtype)
+        self.model = TrilineVAEV2().to(self.device, dtype=self.dtype)
         return True
 
     def getLossDict(self, data_dict: dict, result_dict: dict) -> dict:
-        gt_occ = data_dict["occ"]
-        pred_occ = result_dict["occ"]
+        lambda_sharp_logits = 2.0
+        lambda_coarse_logits = 1.0
+        lambda_kl = 0.001
+
+        gt_tsdf = data_dict["tsdf"]
+        pred_tsdf = result_dict["tsdf"]
         kl = result_dict["kl"]
+        number_sharp = data_dict["number_sharp"][0]
 
-        gt_occ = gt_occ.reshape(-1)
-        pred_occ = pred_occ.reshape(-1)
+        gt_sharp_tsdf = gt_tsdf[:, :number_sharp]
+        gt_coarse_tsdf = gt_tsdf[:, number_sharp:]
 
-        positive_occ_idxs = torch.where(gt_occ == 1)
-        zero_occ_idxs = torch.where(gt_occ == 0)
+        pred_sharp_tsdf = pred_tsdf[:, :number_sharp]
+        pred_coarse_tsdf = pred_tsdf[:, number_sharp:]
 
-        positive_gt_occ = gt_occ[positive_occ_idxs]
-        positive_pred_occ = pred_occ[positive_occ_idxs]
+        positive_sharp_tsdf_idxs = torch.where(gt_sharp_tsdf > 0)
+        negative_sharp_tsdf_idxs = torch.where(gt_sharp_tsdf < 0)
 
-        zero_gt_occ = gt_occ[zero_occ_idxs]
-        zero_pred_occ = pred_occ[zero_occ_idxs]
+        positive_gt_sharp_tsdf = gt_sharp_tsdf[positive_sharp_tsdf_idxs]
+        positive_pred_sharp_tsdf = pred_sharp_tsdf[positive_sharp_tsdf_idxs]
 
-        loss_positive_occ = self.loss_fn(positive_pred_occ, positive_gt_occ)
-        loss_zero_occ = self.loss_fn(zero_pred_occ, zero_gt_occ)
+        negative_gt_sharp_tsdf = gt_sharp_tsdf[negative_sharp_tsdf_idxs]
+        negative_pred_sharp_tsdf = pred_sharp_tsdf[negative_sharp_tsdf_idxs]
+
+        positive_coarse_tsdf_idxs = torch.where(gt_coarse_tsdf > 0)
+        negative_coarse_tsdf_idxs = torch.where(gt_coarse_tsdf < 0)
+
+        positive_gt_coarse_tsdf = gt_coarse_tsdf[positive_coarse_tsdf_idxs]
+        positive_pred_coarse_tsdf = pred_coarse_tsdf[positive_coarse_tsdf_idxs]
+
+        negative_gt_coarse_tsdf = gt_coarse_tsdf[negative_coarse_tsdf_idxs]
+        negative_pred_coarse_tsdf = pred_coarse_tsdf[negative_coarse_tsdf_idxs]
+
+        loss_positive_sharp_tsdf = self.loss_fn(
+            positive_pred_sharp_tsdf, positive_gt_sharp_tsdf
+        )
+        loss_negative_sharp_tsdf = self.loss_fn(
+            negative_pred_sharp_tsdf, negative_gt_sharp_tsdf
+        )
+
+        loss_positive_coarse_tsdf = self.loss_fn(
+            positive_pred_coarse_tsdf, positive_gt_coarse_tsdf
+        )
+        loss_negative_coarse_tsdf = self.loss_fn(
+            negative_pred_coarse_tsdf, negative_gt_coarse_tsdf
+        )
 
         loss_kl = torch.mean(kl)
 
-        loss = loss_positive_occ + loss_zero_occ + loss_kl
+        loss = (
+            lambda_sharp_logits * (loss_positive_sharp_tsdf + loss_negative_sharp_tsdf)
+            + lambda_coarse_logits
+            * (loss_positive_coarse_tsdf + loss_negative_coarse_tsdf)
+            + lambda_kl * loss_kl
+        )
 
-        positive_acc = (
-            positive_pred_occ > 0.5
-        ).sum().item() / positive_pred_occ.numel()
-        zero_acc = (zero_pred_occ < 0.5).sum().item() / zero_pred_occ.numel()
+        positive_sharp_acc = (
+            positive_pred_sharp_tsdf > 0
+        ).sum().item() / positive_pred_sharp_tsdf.numel()
+        negative_sharp_acc = (
+            negative_pred_sharp_tsdf < 0
+        ).sum().item() / negative_pred_sharp_tsdf.numel()
+
+        positive_coarse_acc = (
+            positive_pred_coarse_tsdf > 0
+        ).sum().item() / positive_pred_coarse_tsdf.numel()
+        negative_coarse_acc = (
+            negative_pred_coarse_tsdf < 0
+        ).sum().item() / negative_pred_coarse_tsdf.numel()
 
         loss_dict = {
             "Loss": loss,
-            "LossPositiveOcc": loss_positive_occ,
-            "LossZeroOcc": loss_zero_occ,
-            "PositiveAcc": positive_acc,
-            "ZeroAcc": zero_acc,
+            "LossPositiveSharpTSDF": loss_positive_sharp_tsdf,
+            "LossNegativeSharpTSDF": loss_negative_sharp_tsdf,
+            "LossPositiveCoarseTSDF": loss_positive_coarse_tsdf,
+            "LossNegativeCoarseTSDF": loss_negative_coarse_tsdf,
+            "PositiveSharpTSDFAcc": positive_sharp_acc,
+            "NegativeSharpTSDFAcc": negative_sharp_acc,
+            "PositiveCoarseTSDFAcc": positive_coarse_acc,
+            "NegativeCoarseTSDFAcc": negative_coarse_acc,
             "LossKL": loss_kl,
         }
 
@@ -150,9 +190,9 @@ class Trainer(BaseTrainer):
 
     def preProcessData(self, data_dict: dict, is_training: bool = False) -> dict:
         if is_training:
-            data_dict["drop_prob"] = 0.0
+            data_dict["split"] = "train"
         else:
-            data_dict["drop_prob"] = 0.0
+            data_dict["split"] = "val"
 
         return data_dict
 

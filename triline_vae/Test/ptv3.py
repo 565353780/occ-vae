@@ -8,7 +8,7 @@ from pointcept.models.point_transformer_v3.point_transformer_v3m2_sonata import 
     PointTransformerV3,
 )
 
-from occ_vae.Model.query_fusion import QueryFusion
+from triline_vae.Model.query_fusion import QueryFusion
 
 
 def test():

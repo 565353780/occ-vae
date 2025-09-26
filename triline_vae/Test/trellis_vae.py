@@ -4,7 +4,7 @@ sys.path.append("../point-cept")
 
 import torch
 
-from occ_vae.Model.triline_vae import TrilineVAE
+from triline_vae.Model.triline_vae import TrilineVAE
 
 
 def test():

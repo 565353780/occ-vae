@@ -1,7 +1,7 @@
 import torch
 from tqdm import trange
 
-from occ_vae.Model.triline import Triline
+from triline_vae.Model.triline import Triline
 
 
 def test():
