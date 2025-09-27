@@ -31,42 +31,53 @@ class Triline(object):
         B, _, feat_num, feat_dim = self.feats.shape
         M = coords.shape[1]
 
-        # 把B和3轴维度合并，方便searchsorted和gather同时做
+        # 展开 batch 和 axis，方便 vectorized 操作
         feats_reshape = self.feats.view(
             B * 3, feat_num, feat_dim
         )  # [B*3, feat_num, feat_dim]
         positions_reshape = self.positions.view(B * 3, feat_num)  # [B*3, feat_num]
-        coords_reshape = coords.permute(0, 2, 1).reshape(
-            B * 3, M
-        )  # [B*3, M]，把轴维放在batch维合并
+        coords_reshape = coords.permute(0, 2, 1).reshape(B * 3, M)  # [B*3, M]
 
-        # searchsorted
+        # searchsorted 得到右边 index
         idx = torch.searchsorted(
             positions_reshape, coords_reshape, right=True
         )  # [B*3, M]
+
+        # 边界处理：
+        # (1) 小于最小值 → 全部对齐到最小点
+        mask_left = coords_reshape <= positions_reshape[:, :1]
+        idx[mask_left] = 1
+
+        # (2) 大于等于最大值 → 对齐到最后一点
+        mask_right = coords_reshape >= positions_reshape[:, -1:]
+        idx[mask_right] = feat_num - 1
+
+        # clamp 确保合法
         idx = idx.clamp(1, feat_num - 1)
 
         idx0 = idx - 1
         idx1 = idx
 
-        # gather indices 扩展
-        idx0_exp = idx0.unsqueeze(-1).expand(-1, -1, feat_dim)  # [B*3, M, feat_dim]
+        # gather feats
+        idx0_exp = idx0.unsqueeze(-1).expand(-1, -1, feat_dim)
         idx1_exp = idx1.unsqueeze(-1).expand(-1, -1, feat_dim)
 
-        feat0 = torch.gather(feats_reshape, 1, idx0_exp)  # [B*3, M, feat_dim]
-        feat1 = torch.gather(feats_reshape, 1, idx1_exp)  # [B*3, M, feat_dim]
+        feat0 = torch.gather(feats_reshape, 1, idx0_exp)
+        feat1 = torch.gather(feats_reshape, 1, idx1_exp)
 
-        idx0_pos = torch.gather(positions_reshape, 1, idx0)  # [B*3, M]
-        idx1_pos = torch.gather(positions_reshape, 1, idx1)  # [B*3, M]
+        # gather positions
+        idx0_pos = torch.gather(positions_reshape, 1, idx0)
+        idx1_pos = torch.gather(positions_reshape, 1, idx1)
 
-        weight = (coords_reshape - idx0_pos) / (idx1_pos - idx0_pos + 1e-8)  # [B*3, M]
+        # 插值权重
+        denom = (idx1_pos - idx0_pos).clamp(min=1e-8)  # 防止除零
+        weight = (coords_reshape - idx0_pos) / denom
         weight = weight.unsqueeze(-1)  # [B*3, M, 1]
 
         feat_interp = feat0 * (1 - weight) + feat1 * weight  # [B*3, M, feat_dim]
 
-        # 还原回 [B, 3, M, feat_dim] 再permute成 [B, M, 3, feat_dim]
+        # 还原维度
         feat_interp = feat_interp.view(B, 3, M, feat_dim).permute(0, 2, 1, 3)
-
         return feat_interp
 
     def query(self, coords: torch.Tensor) -> torch.Tensor:

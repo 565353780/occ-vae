@@ -5,7 +5,9 @@ from typing import Union
 from base_trainer.Module.base_trainer import BaseTrainer
 
 from triline_vae.Dataset.tsdf import TSDFDataset
+from triline_vae.Model.triline_vae import TrilineVAE
 from triline_vae.Model.triline_vae_v2 import TrilineVAEV2
+from triline_vae.Metric.tsdf import getTSDFAcc
 
 
 class Trainer(BaseTrainer):
@@ -36,13 +38,9 @@ class Trainer(BaseTrainer):
     ) -> None:
         self.dataset_root_folder_path = dataset_root_folder_path
 
-        self.occ_size = 128
-        self.feat_num = 64
-        self.feat_dim = 32
-
         self.gt_sample_added_to_logger = False
 
-        self.loss_fn = nn.MSELoss()
+        self.loss_fn = nn.L1Loss()
 
         super().__init__(
             batch_size,
@@ -99,7 +97,11 @@ class Trainer(BaseTrainer):
         return True
 
     def createModel(self) -> bool:
-        self.model = TrilineVAEV2().to(self.device, dtype=self.dtype)
+        mode = 1
+        if mode == 1:
+            self.model = TrilineVAE().to(self.device, dtype=self.dtype)
+        elif mode == 2:
+            self.model = TrilineVAEV2().to(self.device, dtype=self.dtype)
         return True
 
     def getLossDict(self, data_dict: dict, result_dict: dict) -> dict:
@@ -118,71 +120,26 @@ class Trainer(BaseTrainer):
         pred_sharp_tsdf = pred_tsdf[:, :number_sharp]
         pred_coarse_tsdf = pred_tsdf[:, number_sharp:]
 
-        positive_sharp_tsdf_idxs = torch.where(gt_sharp_tsdf > 0)
-        negative_sharp_tsdf_idxs = torch.where(gt_sharp_tsdf < 0)
+        loss_sharp_tsdf = self.loss_fn(pred_sharp_tsdf, gt_sharp_tsdf)
 
-        positive_gt_sharp_tsdf = gt_sharp_tsdf[positive_sharp_tsdf_idxs]
-        positive_pred_sharp_tsdf = pred_sharp_tsdf[positive_sharp_tsdf_idxs]
-
-        negative_gt_sharp_tsdf = gt_sharp_tsdf[negative_sharp_tsdf_idxs]
-        negative_pred_sharp_tsdf = pred_sharp_tsdf[negative_sharp_tsdf_idxs]
-
-        positive_coarse_tsdf_idxs = torch.where(gt_coarse_tsdf > 0)
-        negative_coarse_tsdf_idxs = torch.where(gt_coarse_tsdf < 0)
-
-        positive_gt_coarse_tsdf = gt_coarse_tsdf[positive_coarse_tsdf_idxs]
-        positive_pred_coarse_tsdf = pred_coarse_tsdf[positive_coarse_tsdf_idxs]
-
-        negative_gt_coarse_tsdf = gt_coarse_tsdf[negative_coarse_tsdf_idxs]
-        negative_pred_coarse_tsdf = pred_coarse_tsdf[negative_coarse_tsdf_idxs]
-
-        loss_positive_sharp_tsdf = self.loss_fn(
-            positive_pred_sharp_tsdf, positive_gt_sharp_tsdf
-        )
-        loss_negative_sharp_tsdf = self.loss_fn(
-            negative_pred_sharp_tsdf, negative_gt_sharp_tsdf
-        )
-
-        loss_positive_coarse_tsdf = self.loss_fn(
-            positive_pred_coarse_tsdf, positive_gt_coarse_tsdf
-        )
-        loss_negative_coarse_tsdf = self.loss_fn(
-            negative_pred_coarse_tsdf, negative_gt_coarse_tsdf
-        )
+        loss_coarse_tsdf = self.loss_fn(pred_coarse_tsdf, gt_coarse_tsdf)
 
         loss_kl = torch.mean(kl)
 
         loss = (
-            lambda_sharp_logits * (loss_positive_sharp_tsdf + loss_negative_sharp_tsdf)
-            + lambda_coarse_logits
-            * (loss_positive_coarse_tsdf + loss_negative_coarse_tsdf)
+            lambda_sharp_logits * loss_sharp_tsdf
+            + lambda_coarse_logits * loss_coarse_tsdf
             + lambda_kl * loss_kl
         )
 
-        positive_sharp_acc = (
-            positive_pred_sharp_tsdf > 0
-        ).sum().item() / positive_pred_sharp_tsdf.numel()
-        negative_sharp_acc = (
-            negative_pred_sharp_tsdf < 0
-        ).sum().item() / negative_pred_sharp_tsdf.numel()
-
-        positive_coarse_acc = (
-            positive_pred_coarse_tsdf > 0
-        ).sum().item() / positive_pred_coarse_tsdf.numel()
-        negative_coarse_acc = (
-            negative_pred_coarse_tsdf < 0
-        ).sum().item() / negative_pred_coarse_tsdf.numel()
-
         loss_dict = {
             "Loss": loss,
-            "LossPositiveSharpTSDF": loss_positive_sharp_tsdf,
-            "LossNegativeSharpTSDF": loss_negative_sharp_tsdf,
-            "LossPositiveCoarseTSDF": loss_positive_coarse_tsdf,
-            "LossNegativeCoarseTSDF": loss_negative_coarse_tsdf,
-            "PositiveSharpTSDFAcc": positive_sharp_acc,
-            "NegativeSharpTSDFAcc": negative_sharp_acc,
-            "PositiveCoarseTSDFAcc": positive_coarse_acc,
-            "NegativeCoarseTSDFAcc": negative_coarse_acc,
+            "LossSharpTSDF": loss_sharp_tsdf,
+            "LossCoarseTSDF": loss_coarse_tsdf,
+            "Acc@1536": getTSDFAcc(gt_tsdf, pred_tsdf, 2.0 / 1536.0),
+            "Acc@1024": getTSDFAcc(gt_tsdf, pred_tsdf, 2.0 / 1024.0),
+            "Acc@512": getTSDFAcc(gt_tsdf, pred_tsdf, 2.0 / 512.0),
+            "Acc@256": getTSDFAcc(gt_tsdf, pred_tsdf, 2.0 / 256.0),
             "LossKL": loss_kl,
         }
 

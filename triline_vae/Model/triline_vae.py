@@ -14,93 +14,62 @@ from triline_vae.Model.occ_decoder import OccDecoder
 from triline_vae.Model.diagonal_gaussian_distribution import (
     DiagonalGaussianDistribution,
 )
-# from triline_vae.Method.occ import make_occ_centers
-
-
-def occ_to_pts(occ: torch.Tensor, centers: torch.Tensor):
-    B, M, N, O = occ.shape
-
-    coords_list = []
-    batch_list = []
-
-    for b in range(B):
-        mask_b = occ[b] == 1  # 或者你要找的条件，比如 (occ[b] == 1) | (occ[b] == -1)
-        idx = torch.where(mask_b)
-
-        if idx[0].numel() == 0:
-            continue
-
-        # 用 idx 从 centers 取出对应点的坐标
-        coords_b = centers[idx]  # (N_b, 3)
-
-        coords_list.append(coords_b)
-        batch_list.append(
-            torch.full((coords_b.shape[0],), b, dtype=torch.long, device=occ.device)
-        )
-
-    coords = torch.cat(coords_list, dim=0)  # (N_total, 3)
-    batch_idx = torch.cat(batch_list, dim=0)  # (N_total,)
-
-    return coords, batch_idx
 
 
 class TrilineVAE(nn.Module):
     def __init__(
         self,
-        occ_size: int = 512,
-        feat_num: int = 512,
-        feat_dim: int = 32,
+        feat_num: int = 2048,
+        feat_dim: int = 512,
     ):
         super().__init__()
-        self.occ_size = occ_size
         self.feat_num = feat_num
         self.feat_dim = feat_dim
 
-        self.latent_dim = feat_dim + 1
-        self.flatten_latent_dim = 3 * feat_num * self.latent_dim
+        self.latent_dim = feat_dim
 
         self.point_embed = PointEmbed(dim=self.latent_dim)
 
-        self.ptv3_encoder = PointTransformerV3(self.latent_dim, enc_mode=True)
+        self.ptv3_encoder = PointTransformerV3(self.latent_dim + 3, enc_mode=True)
 
         self.triline_encoder = QueryFusion(512, self.feat_num, self.latent_dim * 3)
 
         self.mu_fc = nn.Linear(self.latent_dim, self.latent_dim)
         self.logvar_fc = nn.Linear(self.latent_dim, self.latent_dim)
 
-        self.delta_fc = nn.Sequential(
-            nn.Linear(self.feat_num, self.feat_num - 1),
-            nn.Sigmoid(),
-        )
-
         # Decoder MLP
         self.decoder = OccDecoder(
             feat_dim=feat_dim,
-            hidden_dim=32,
+            hidden_dim=64,
             num_layers=5,
             use_xyz=False,
             use_posenc=False,
             posenc_freq=10,
         )
-
-        self.query_coords = make_occ_centers(occ_size)
         return
 
     def encode(
-        self, occ: torch.Tensor, deterministic: bool = False
+        self, pts: torch.Tensor, deterministic: bool = False
     ) -> Tuple[Triline, torch.Tensor]:
-        if self.query_coords.device != occ.device:
-            self.query_coords = self.query_coords.to(occ.device)
+        flatten_pts = pts.reshape(-1, pts.shape[-1])  # [B*N, C]
 
-        coords, batch = occ_to_pts(occ, self.query_coords)
+        # 生成 batch 索引
+        batch_idxs = torch.arange(pts.shape[0], device=pts.device).repeat_interleave(
+            pts.shape[1]
+        )
 
-        coords_feature = self.point_embed(coords.unsqueeze(0)).squeeze(0)
+        coord = flatten_pts[:, :3]
+        feat = flatten_pts[:, 3:]
+
+        coord_embed = self.point_embed(coord.unsqueeze(0)).squeeze(0)
+
+        merge_feat = torch.cat([feat, coord_embed], dim=-1)
 
         ptv3_data = {
-            "coord": coords,
-            "feat": coords_feature,
-            "batch": batch,
-            "grid_size": 1.0 / self.occ_size,
+            "coord": coord,
+            "feat": merge_feat,
+            "batch": batch_idxs,
+            "grid_size": 0.01,
         }
 
         point = self.ptv3_encoder(ptv3_data)
@@ -115,17 +84,12 @@ class TrilineVAE(nn.Module):
         mu = self.mu_fc(x)
         logvar = self.logvar_fc(x)
 
-        posterior = DiagonalGaussianDistribution(mu, logvar, deterministic)
+        posterior = DiagonalGaussianDistribution([mu, logvar], deterministic)
 
         x = posterior.sample()
         kl = posterior.kl()
 
-        feats = x[..., :-1]
-        deltas = x[..., -1]
-
-        deltas = self.delta_fc(deltas)
-
-        triline = Triline(feats, deltas)
+        triline = Triline(x)
 
         return triline, kl
 
@@ -157,16 +121,18 @@ class TrilineVAE(nn.Module):
         return logits
 
     def forward(self, data_dict: dict) -> dict:
-        occ = data_dict["occ"]
+        coarse_surface = data_dict["coarse_surface"]
+        sharp_surface = data_dict["sharp_surface"]
+        queries = data_dict["rand_points"]
 
-        triline, kl = self.encode(occ)
+        merge_surface = torch.cat([coarse_surface, sharp_surface], dim=1)
 
-        query_coords = self.query_coords.view(1, -1, 3).expand(occ.shape[0], -1, -1)
+        triline, kl = self.encode(merge_surface)
 
-        logits = self.decodeLarge(triline, query_coords)
+        logits = self.decodeLarge(triline, queries)
 
         result_dict = {
-            "occ": logits,
+            "tsdf": logits,
             "kl": kl,
         }
 

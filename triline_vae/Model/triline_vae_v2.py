@@ -18,12 +18,12 @@ class TrilineVAEV2(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-        self.feat_dim: int = 255
+        self.feat_dim: int = 256
 
         self.use_downsample: bool = False
         self.num_latents: int = 256
         self.embed_dim: int = 64
-        self.width: int = 3 * (self.feat_dim + 1)
+        self.width: int = 3 * self.feat_dim
         self.point_feats: int = 3
         self.embed_point_feats: bool = False
         self.out_dim: int = 1
@@ -60,11 +60,6 @@ class TrilineVAEV2(nn.Module):
         self.pre_kl = nn.Linear(self.width, self.embed_dim * 2)
         self.post_kl = nn.Linear(self.embed_dim, self.width)
 
-        self.delta_fc = nn.Sequential(
-            nn.Linear(self.num_latents, self.num_latents - 1),
-            nn.Sigmoid(),
-        )
-
         self.transformer = Perceiver(
             n_ctx=self.num_latents,
             width=self.width,
@@ -77,7 +72,7 @@ class TrilineVAEV2(nn.Module):
 
         self.decoder = OccDecoder(
             feat_dim=self.feat_dim,
-            hidden_dim=32,
+            hidden_dim=64,
             num_layers=5,
             use_xyz=False,
             use_posenc=False,
@@ -134,14 +129,9 @@ class TrilineVAEV2(nn.Module):
 
         latents = self.transformer(latents)
 
-        latents = latents.view(latents.shape[0], 3, self.num_latents, self.feat_dim + 1)
+        latents = latents.view(latents.shape[0], 3, self.num_latents, self.feat_dim)
 
-        feats = latents[..., :-1]
-        deltas = latents[..., -1]
-
-        deltas = self.delta_fc(deltas)
-
-        triline = Triline(feats, deltas)
+        triline = Triline(latents)
 
         return triline
 
@@ -154,8 +144,9 @@ class TrilineVAEV2(nn.Module):
         Returns:
             logits (torch.FloatTensor): [B, N], tsdf logits
         """
+        # (B, N, 3, feat_dim)
         feat = triline.query(queries)
-        feat = feat.reshape(feat.shape[:-2] + (feat.shape[-2] * feat.shape[-1],))
+        feat = feat.reshape(feat.shape[0], feat.shape[1], 3 * self.feat_dim)
         logits = self.decoder(feat).squeeze(-1)
         return logits
 
