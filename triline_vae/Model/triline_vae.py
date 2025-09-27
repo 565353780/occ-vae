@@ -97,7 +97,8 @@ class TrilineVAE(nn.Module):
         feat = triline.query(coords)
         feat = feat.reshape(feat.shape[:-2] + (feat.shape[-2] * feat.shape[-1],))
         occ_logits = self.decoder(feat).squeeze(-1)
-        return occ_logits
+        tsdf = nn.Sigmoid()(occ_logits) * 2.0 - 1.0
+        return tsdf
 
     def decodeLarge(
         self, triline: Triline, coords: torch.Tensor, query_step_size: int = 100000
@@ -129,10 +130,10 @@ class TrilineVAE(nn.Module):
 
         triline, kl = self.encode(merge_surface)
 
-        logits = self.decodeLarge(triline, queries)
+        tsdf = self.decodeLarge(triline, queries)
 
         result_dict = {
-            "tsdf": logits,
+            "tsdf": tsdf,
             "kl": kl,
         }
 

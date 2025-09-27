@@ -186,6 +186,7 @@ class TSDFDataset(Dataset):
                 mirrored_points, mirrored_normals, rotation_matrix
             )
             coarse_surface = np.concatenate([surface, normal], axis=1)
+
             mirrored_points, mirrored_normals = apply_transformation(
                 sharp_surface[:, :3], sharp_surface[:, 3:], mirror_matrix
             )

@@ -9,6 +9,7 @@ from triline_vae.Model.diagonal_gaussian_distribution import (
 from triline_vae.Model.Layer.fourier_embedder import FourierEmbedder
 from triline_vae.Model.transformer.perceiver_1d import Perceiver
 from triline_vae.Model.occ_decoder import OccDecoder
+from triline_vae.Model.tsdf_decoder import TSDFDecoder
 from triline_vae.Model.perceiver_cross_attention_encoder import (
     PerceiverCrossAttentionEncoder,
 )
@@ -70,13 +71,9 @@ class TrilineVAEV2(nn.Module):
             use_flash=self.use_flash,
         )
 
-        self.decoder = OccDecoder(
-            feat_dim=self.feat_dim,
-            hidden_dim=64,
-            num_layers=5,
-            use_xyz=False,
-            use_posenc=False,
-            posenc_freq=10,
+        self.decoder = TSDFDecoder(
+            in_dim=3 * self.feat_dim,
+            hidden_dim=self.feat_dim,
         )
         return
 
@@ -148,7 +145,8 @@ class TrilineVAEV2(nn.Module):
         feat = triline.query(queries)
         feat = feat.reshape(feat.shape[0], feat.shape[1], 3 * self.feat_dim)
         logits = self.decoder(feat).squeeze(-1)
-        return logits
+        tsdf = nn.Sigmoid()(logits) * 2.0 - 1.0
+        return tsdf
 
     def forward(
         self,
@@ -165,10 +163,10 @@ class TrilineVAEV2(nn.Module):
 
         triline = self.decode(kl_embed)
 
-        logits = self.query(queries, triline)
+        tsdf = self.query(queries, triline)
 
         result_dict = {
-            "tsdf": logits,
+            "tsdf": tsdf,
             "kl": kl,
         }
 

@@ -16,8 +16,8 @@ def demo():
     assert dataset_root_folder_path is not None
     print(dataset_root_folder_path)
 
-    batch_size = 8
-    accum_iter = 8
+    batch_size = 6
+    accum_iter = 11
     num_workers = min(16, batch_size)
     model_file_path = "./output/v1/model_last.pth"
     model_file_path = None
