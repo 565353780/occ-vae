@@ -125,7 +125,6 @@ class PerceiverCrossAttentionEncoder(nn.Module):
             )
 
             query = torch.cat([query_coarse, query_sharp], dim=1)
-            print("query shape", f"{query.shape}")
         else:
             query = self.query
             query = repeat(query, "m c -> b m c", b=bs)

@@ -2,20 +2,20 @@ import math
 import torch
 import torch.nn as nn
 
-from triline_vae.Model.triline import Triline
 from triline_vae.Model.diagonal_gaussian_distribution import (
     DiagonalGaussianDistribution,
 )
 from triline_vae.Model.Layer.fourier_embedder import FourierEmbedder
 from triline_vae.Model.transformer.perceiver_1d import Perceiver
-from triline_vae.Model.occ_decoder import OccDecoder
-from triline_vae.Model.tsdf_decoder import TSDFDecoder
 from triline_vae.Model.perceiver_cross_attention_encoder import (
     PerceiverCrossAttentionEncoder,
 )
+from triline_vae.Model.perceiver_cross_attention_decoder import (
+    PerceiverCrossAttentionDecoder,
+)
 
 
-class TrilineVAEV2(nn.Module):
+class VecSetVAE(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
@@ -71,9 +71,16 @@ class TrilineVAEV2(nn.Module):
             use_flash=self.use_flash,
         )
 
-        self.decoder = TSDFDecoder(
-            in_dim=3 * self.feat_dim,
-            hidden_dim=self.feat_dim,
+        # decoder
+        self.decoder = PerceiverCrossAttentionDecoder(
+            embedder=self.embedder,
+            out_dim=self.out_dim,
+            num_latents=self.num_latents,
+            width=self.width,
+            heads=self.heads,
+            init_scale=self.init_scale,
+            qkv_bias=self.qkv_bias,
+            use_flash=self.use_flash,
         )
         return
 
@@ -112,7 +119,7 @@ class TrilineVAEV2(nn.Module):
         kl = posterior.kl()
         return kl_embed, kl
 
-    def decode(self, latents: torch.FloatTensor) -> Triline:
+    def decode(self, latents: torch.FloatTensor) -> torch.Tensor:
         """
         Args:
             latents (torch.FloatTensor): [B, embed_dim]
@@ -125,14 +132,9 @@ class TrilineVAEV2(nn.Module):
         )  # [B, num_latents, embed_dim] -> [B, num_latents, width]
 
         latents = self.transformer(latents)
+        return latents
 
-        latents = latents.view(latents.shape[0], 3, self.num_latents, self.feat_dim)
-
-        triline = Triline(latents)
-
-        return triline
-
-    def query(self, queries: torch.FloatTensor, triline: Triline):
+    def query(self, queries: torch.FloatTensor, latents: torch.Tensor):
         """
         Args:
             queries (torch.FloatTensor): [B, N, 3]
@@ -141,12 +143,8 @@ class TrilineVAEV2(nn.Module):
         Returns:
             logits (torch.FloatTensor): [B, N], tsdf logits
         """
-        # (B, N, 3, feat_dim)
-        feat = triline.query(queries)
-        feat = feat.reshape(feat.shape[0], feat.shape[1], 3 * self.feat_dim)
-        logits = self.decoder(feat).squeeze(-1)
-        tsdf = nn.Sigmoid()(logits) * 2.0 - 1.0
-        return tsdf
+        logits = self.decoder(queries, latents).squeeze(-1)
+        return logits
 
     def forward(
         self,
@@ -161,9 +159,9 @@ class TrilineVAEV2(nn.Module):
 
         kl_embed, kl = self.encode_kl_embed(shape_latents, sample_posterior=True)
 
-        triline = self.decode(kl_embed)
+        latents = self.decode(kl_embed)
 
-        tsdf = self.query(queries, triline)
+        tsdf = self.query(queries, latents)
 
         result_dict = {
             "tsdf": tsdf,
