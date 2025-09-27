@@ -126,7 +126,10 @@ class TrilineVAEV2(nn.Module):
 
         latents = self.transformer(latents)
 
-        latents = latents.view(latents.shape[0], 3, self.num_latents, self.feat_dim)
+        latents_chunks = torch.chunk(
+            latents, 3, dim=-1
+        )  # list of 3 tensors, each [B, N, C/3]
+        latents = torch.stack(latents_chunks, dim=1)
 
         triline = Triline(latents)
 

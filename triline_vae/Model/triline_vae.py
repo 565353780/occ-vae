@@ -79,7 +79,10 @@ class TrilineVAE(nn.Module):
 
         x = self.triline_encoder(feature, batch)
 
-        x = x.view(x.shape[0], 3, self.feat_num, self.latent_dim)
+        latents_chunks = torch.chunk(
+            x, 3, dim=-1
+        )  # list of 3 tensors, each [B, N, C/3]
+        x = torch.stack(latents_chunks, dim=1)
 
         mu = self.mu_fc(x)
         logvar = self.logvar_fc(x)

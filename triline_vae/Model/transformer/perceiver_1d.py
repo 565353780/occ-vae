@@ -36,7 +36,7 @@ class Perceiver(nn.Module):
             ]
         )
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         for block in self.resblocks:
             x = block(x)
         return x

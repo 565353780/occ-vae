@@ -99,7 +99,7 @@ class Trainer(BaseTrainer):
         return True
 
     def createModel(self) -> bool:
-        mode = 3
+        mode = 2
         if mode == 1:
             self.model = TrilineVAE().to(self.device, dtype=self.dtype)
         elif mode == 2:
@@ -112,13 +112,11 @@ class Trainer(BaseTrainer):
         lambda_sharp_logits = 2.0
         lambda_coarse_logits = 1.0
         lambda_kl = 0.001
-        # lambda_eikonal = 1.0
 
         gt_tsdf = data_dict["tsdf"]
         pred_tsdf = result_dict["tsdf"]
         kl = result_dict["kl"]
         number_sharp = data_dict["number_sharp"][0]
-        # queries = data_dict["rand_points"]
 
         gt_sharp_tsdf = gt_tsdf[:, :number_sharp]
         gt_coarse_tsdf = gt_tsdf[:, number_sharp:]
@@ -132,6 +130,8 @@ class Trainer(BaseTrainer):
 
         loss_kl = torch.mean(kl)
 
+        # lambda_eikonal = 1.0
+        # queries = data_dict["rand_points"]
         # loss_eikonal = eikonal_loss_fn(pred_tsdf, queries, gt_tsdf, trunc=1.0)
 
         loss = (
@@ -170,6 +170,7 @@ class Trainer(BaseTrainer):
         else:
             data_dict["split"] = "val"
 
+        # eikonal loss needed grads
         # data_dict["rand_points"].requires_grad_(True)
 
         return data_dict
