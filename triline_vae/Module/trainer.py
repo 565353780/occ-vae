@@ -101,11 +101,11 @@ class Trainer(BaseTrainer):
     def createModel(self) -> bool:
         mode = 2
         if mode == 1:
-            self.model = TrilineVAE().to(self.device, dtype=self.dtype)
+            self.model = TrilineVAE().to(self.device)
         elif mode == 2:
-            self.model = TrilineVAEV2().to(self.device, dtype=self.dtype)
+            self.model = TrilineVAEV2().to(self.device)
         elif mode == 3:
-            self.model = VecSetVAE().to(self.device, dtype=self.dtype)
+            self.model = VecSetVAE().to(self.device)
         return True
 
     def getLossDict(self, data_dict: dict, result_dict: dict) -> dict:

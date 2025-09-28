@@ -16,18 +16,18 @@ def demo():
     assert dataset_root_folder_path is not None
     print(dataset_root_folder_path)
 
-    batch_size = 2
-    accum_iter = 32
+    batch_size = 16
+    accum_iter = 16
     num_workers = min(16, batch_size)
     model_file_path = "./output/v1/model_last.pth"
-    # model_file_path = None
+    model_file_path = None
     weights_only = True
     device = "auto"
-    dtype = torch.float32
+    dtype = torch.float16
     warm_step_num = 2000
     finetune_step_num = -1
     lr = 1e-5
-    lr_batch_size = 32
+    lr_batch_size = 256
     ema_start_step = 5000
     ema_decay_init = 0.99
     ema_decay = 0.999

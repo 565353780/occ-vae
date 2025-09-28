@@ -25,9 +25,11 @@ class PerceiverCrossAttentionEncoder(nn.Module):
         qkv_bias: bool = True,
         use_ln_post: bool = False,
         use_flash: bool = False,
+        use_checkpoint: bool = False,
     ):
         super().__init__()
 
+        self.use_checkpoint = use_checkpoint
         self.num_latents = num_latents
         self.use_downsample = use_downsample
         self.embed_point_feats = embed_point_feats
@@ -48,6 +50,7 @@ class PerceiverCrossAttentionEncoder(nn.Module):
             init_scale=init_scale,
             qkv_bias=qkv_bias,
             use_flash=use_flash,
+            use_checkpoint=False,
         )
 
         self.cross_attn1 = ResidualCrossAttentionBlock(
@@ -56,6 +59,7 @@ class PerceiverCrossAttentionEncoder(nn.Module):
             init_scale=init_scale,
             qkv_bias=qkv_bias,
             use_flash=use_flash,
+            use_checkpoint=False,
         )
 
         self.self_attn = Perceiver(
@@ -66,6 +70,7 @@ class PerceiverCrossAttentionEncoder(nn.Module):
             init_scale=init_scale,
             qkv_bias=qkv_bias,
             use_flash=use_flash,
+            use_checkpoint=use_checkpoint,
         )
 
         if use_ln_post:
@@ -98,10 +103,10 @@ class PerceiverCrossAttentionEncoder(nn.Module):
 
             coarse_ratios = tokens / N_coarse
             sharp_ratios = tokens / N_sharp
-            if split == "train":
-                probabilities = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.3, 0.2])
-            else:
+            if split == "val":
                 probabilities = np.array([0, 0, 0, 0, 0, 1, 0])
+            elif split == "train":
+                probabilities = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.3, 0.2])
             ratio_coarse = np.random.choice(coarse_ratios, size=1, p=probabilities)[0]
             index = np.where(coarse_ratios == ratio_coarse)[0]
             ratio_sharp = sharp_ratios[index].item()

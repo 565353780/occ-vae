@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+from triline_vae.Model.checkpoint import checkpoint
 from triline_vae.Model.Layer.fourier_embedder import FourierEmbedder
 from triline_vae.Model.transformer.attention import ResidualCrossAttentionBlock
 
@@ -16,9 +17,11 @@ class PerceiverCrossAttentionDecoder(nn.Module):
         init_scale: float = 0.25,
         qkv_bias: bool = True,
         use_flash: bool = False,
+        use_checkpoint: bool = False,
     ):
         super().__init__()
 
+        self.use_checkpoint = use_checkpoint
         self.embedder = embedder
 
         self.query_proj = nn.Linear(self.embedder.out_dim, width)
@@ -30,6 +33,7 @@ class PerceiverCrossAttentionDecoder(nn.Module):
             init_scale=init_scale,
             qkv_bias=qkv_bias,
             use_flash=use_flash,
+            use_checkpoint=use_checkpoint,
         )
 
         self.ln_post = nn.LayerNorm(width)
@@ -43,5 +47,7 @@ class PerceiverCrossAttentionDecoder(nn.Module):
         return x
 
     def forward(self, queries: torch.FloatTensor, latents: torch.FloatTensor):
-        logits = self._forward(queries, latents)
+        logits = checkpoint(
+            self._forward, (queries, latents), self.parameters(), self.use_checkpoint
+        )
         return logits

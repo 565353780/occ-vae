@@ -19,4 +19,3 @@ class MLP(nn.Module):
 
     def forward(self, x):
         return self.c_proj(self.gelu(self.c_fc(x)))
-
