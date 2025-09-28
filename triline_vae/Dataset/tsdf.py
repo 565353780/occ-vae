@@ -175,7 +175,7 @@ class TSDFDataset(Dataset):
         sdfs = np.where(nan_mask, 0, sdfs)
         tsdfs = sdfs.flatten().astype(np.float32).clip(-0.015, 0.015) / 0.015
 
-        if self.split == "train":
+        if self.split == "train" and False:
             mirror_matrix = random_mirror_matrix()
             rotation_matrix = random_rotation_matrix()
 

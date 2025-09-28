@@ -17,17 +17,17 @@ def demo():
     print(dataset_root_folder_path)
 
     batch_size = 2
-    accum_iter = 1
+    accum_iter = 32
     num_workers = min(16, batch_size)
     model_file_path = "./output/v1/model_last.pth"
-    model_file_path = None
-    weights_only = False
+    # model_file_path = None
+    weights_only = True
     device = "auto"
     dtype = torch.float32
-    warm_step_num = 400
+    warm_step_num = 2000
     finetune_step_num = -1
     lr = 1e-5
-    lr_batch_size = 2
+    lr_batch_size = 32
     ema_start_step = 5000
     ema_decay_init = 0.99
     ema_decay = 0.999
