@@ -1,6 +1,6 @@
 import torch
-import deepspeed
 from typing import Callable, Sequence, Iterable, Union
+# import deepspeed
 
 
 def checkpoint(
