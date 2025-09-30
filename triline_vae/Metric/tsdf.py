@@ -1,9 +1,6 @@
 import torch
 
 
-import torch
-
-
 @torch.no_grad()
 def getTSDFAccPos(
     gt_tsdf: torch.Tensor,
