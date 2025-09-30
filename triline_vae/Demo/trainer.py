@@ -19,9 +19,9 @@ def demo():
     batch_size = 16
     accum_iter = 16
     num_workers = min(16, batch_size)
-    model_file_path = "./output/v1/model_last.pth"
-    model_file_path = None
-    weights_only = True
+    model_file_path = "./output/v2/model_last.pth"
+    # model_file_path = None
+    weights_only = False
     device = "auto"
     dtype = torch.float16
     warm_step_num = 2000

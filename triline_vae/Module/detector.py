@@ -1,63 +1,57 @@
 import os
 import torch
+import trimesh
 from typing import Union
 
-from octree_shape.Module.octree_builder import OctreeBuilder
-from octree_shape.Method.occ import toOccCenters
-from octree_shape.Method.render import renderBoxCentersMesh
+from triline_vae.Dataset.tsdf import TSDFDataset
+from triline_vae.Model.triline_vae import TrilineVAE
+from triline_vae.Model.triline_vae_v2 import TrilineVAEV2
 
-from occ_vae.Model.triline import Triline
-from occ_vae.Model.triline_vae import TrilineVAE
-from occ_vae.Method.occ import make_occ_centers
+from triline_vae.Method.tomesh import extractMesh
 
 
 class Detector(object):
     def __init__(
         self,
         model_file_path: Union[str, None] = None,
-        use_ema: bool = False,
-        device: str = "cuda:0",
-        dtype=torch.float32,
+        use_ema: bool = True,
+        batch_size: int = 1200000,
+        resolution: int = 128,
+        device: str = "cpu",
     ) -> None:
-        self.use_ema = use_ema
+        self.batch_size = batch_size
+        self.resolution = resolution
         self.device = device
-        self.dtype = dtype
 
-        self.depth_max = 7
-        self.feat_num = 64
-        self.feat_dim = 32
-
-        occ_size = 2**self.depth_max
-
-        self.query_coords = (
-            make_occ_centers(occ_size).view(1, -1, 3).to(self.device, dtype=self.dtype)
-        )
-
-        self.model = TrilineVAE(
-            occ_size=occ_size,
-            feat_num=self.feat_num,
-            feat_dim=self.feat_dim,
-        ).to(self.device, dtype=self.dtype)
+        self.model = TrilineVAEV2().to(self.device)
 
         if model_file_path is not None:
-            self.loadModel(model_file_path)
+            self.loadModel(model_file_path, use_ema)
+
+        self.tsdf_dataset = TSDFDataset(
+            "/home/chli/chLi/Dataset/",
+            "Objaverse_82K/sharp_edge_sdf/",
+            split="val",
+            n_supervision=[21384, 10000, 10000],
+        )
         return
 
-    def loadModel(self, model_file_path: str) -> bool:
+    def loadModel(self, model_file_path: str, use_ema: bool = True) -> bool:
         if not os.path.exists(model_file_path):
             print("[ERROR][Detector::loadModel]")
-            print("\t model_file not exist!")
+            print("\t model file not exist!")
             print("\t model_file_path:", model_file_path)
             return False
 
-        model_dict = torch.load(
-            model_file_path, map_location=torch.device(self.device), weights_only=False
-        )
+        state_dict = torch.load(model_file_path, map_location="cpu")
 
-        if self.use_ema:
-            self.model.load_state_dict(model_dict["ema_model"])
+        if use_ema:
+            model_state_dict = state_dict["ema_model"]
         else:
-            self.model.load_state_dict(model_dict["model"])
+            model_state_dict = state_dict["model"]
+
+        self.model.load_state_dict(model_state_dict)
+        self.model.eval()
 
         print("[INFO][Detector::loadModel]")
         print("\t load model success!")
@@ -65,55 +59,27 @@ class Detector(object):
         return True
 
     @torch.no_grad()
-    def encodeMeshFile(self, mesh_file_path: str) -> Triline:
-        self.model.eval()
-
-        focus_center = [0, 0, 0.0]
-        focus_length = 1.0
-        normalize_scale = 0.99
-        output_info = True
-
-        octree_builder = OctreeBuilder(
-            mesh_file_path,
-            self.depth_max,
-            focus_center,
-            focus_length,
-            normalize_scale,
-            output_info,
+    def detect(
+        self,
+        coarse_surface: torch.Tensor,
+        sharp_surface: torch.Tensor,
+    ) -> Union[trimesh.Trimesh, None]:
+        triline = self.model.encodeTriline(coarse_surface, sharp_surface)
+        mesh = extractMesh(
+            triline,
+            self.model,
+            self.resolution,
+            self.batch_size,
+            mode="odc",
         )
+        return mesh
 
-        occ = octree_builder.getDepthOcc(self.depth_max)
+    @torch.no_grad()
+    def detectDataset(self, data_idx: int) -> Union[trimesh.Trimesh, None]:
+        data_dict = self.tsdf_dataset.__getitem__(data_idx)
 
-        gt_occ = torch.from_numpy(occ).unsqueeze(0).to(self.device, dtype=self.dtype)
+        coarse_surface = data_dict["coarse_surface"].unsqueeze(0).to(self.device)
+        sharp_surface = data_dict["sharp_surface"].unsqueeze(0).to(self.device)
 
-        triline, _ = self.model.encode(gt_occ, True)
-
-        pred_occ = self.model.decodeLarge(triline, self.query_coords)
-
-        gt_occ = gt_occ.reshape(-1)
-        pred_occ = pred_occ.reshape(-1)
-
-        positive_occ_idxs = torch.where(gt_occ == 1)
-        zero_occ_idxs = torch.where(gt_occ == 0)
-
-        positive_pred_occ = pred_occ[positive_occ_idxs]
-
-        zero_pred_occ = pred_occ[zero_occ_idxs]
-
-        positive_acc = (
-            positive_pred_occ > 0.5
-        ).sum().item() / positive_pred_occ.numel()
-        zero_acc = (zero_pred_occ < 0.5).sum().item() / zero_pred_occ.numel()
-
-        print("[INFO][Detector::encodeMeshFile]")
-        print("\t accuracy: positive", positive_acc, ", zero", zero_acc)
-        return triline
-
-    def renderTriline(self, triline: Triline) -> bool:
-        occ_size = 2**self.depth_max
-        pred_occ = self.model.decodeLarge(triline, self.query_coords) > 0.5
-        occ_array = pred_occ.view(occ_size, occ_size, occ_size).detach().cpu().numpy()
-        centers = toOccCenters(occ_array)
-        length = 0.5**self.depth_max
-        renderBoxCentersMesh(centers, length)
-        return True
+        mesh = self.detect(coarse_surface, sharp_surface)
+        return mesh

@@ -38,6 +38,7 @@ class TrilineVAEV2(nn.Module):
         self.use_ln_post: bool = True
         self.use_flash: bool = True
         self.use_checkpoint: bool = True
+        self.split = "val"
 
         self.embedder = FourierEmbedder(
             num_freqs=self.num_freqs,
@@ -136,6 +137,16 @@ class TrilineVAEV2(nn.Module):
 
         triline = Triline(latents)
 
+        return triline
+
+    def encodeTriline(
+        self, coarse_surface: torch.Tensor, sharp_surface: torch.Tensor
+    ) -> Triline:
+        shape_latents = self.encode(coarse_surface, sharp_surface)
+
+        kl_embed, _ = self.encode_kl_embed(shape_latents, sample_posterior=False)
+
+        triline = self.decode(kl_embed)
         return triline
 
     def query(self, queries: torch.FloatTensor, triline: Triline):

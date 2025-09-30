@@ -1,10 +1,6 @@
 import sys
 
-sys.path.append("../octree-shape")
 sys.path.append("../point-cept")
-
-import os
-import torch
 
 from triline_vae.Module.detector import Detector
 
@@ -12,19 +8,19 @@ from triline_vae.Module.detector import Detector
 def demo():
     model_file_path = "./output/v2/model_last.pth"
     use_ema = False
+    batch_size = 1200000
+    resolution = 128
     device = "cuda"
-    dtype = torch.float32
-
-    mesh_file_path = os.environ["HOME"] + "/chLi/Dataset/Famous/bunny-v2.ply"
 
     detector = Detector(
         model_file_path,
         use_ema,
+        batch_size,
+        resolution,
         device,
-        dtype,
     )
 
-    triline = detector.encodeMeshFile(mesh_file_path)
+    mesh = detector.detectDataset(0)
 
-    detector.renderTriline(triline)
+    print(mesh)
     return True
