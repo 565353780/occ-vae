@@ -37,6 +37,8 @@ class VecSetVAE(nn.Module):
         self.qkv_bias: bool = False
         self.use_ln_post: bool = True
         self.use_flash: bool = True
+        self.use_checkpoint: bool = True
+        self.split = "val"
 
         self.embedder = FourierEmbedder(
             num_freqs=self.num_freqs,
@@ -56,6 +58,7 @@ class VecSetVAE(nn.Module):
             qkv_bias=self.qkv_bias,
             use_ln_post=self.use_ln_post,
             use_flash=self.use_flash,
+            use_checkpoint=self.use_checkpoint,
         )
 
         self.pre_kl = nn.Linear(self.width, self.embed_dim * 2)
@@ -69,6 +72,7 @@ class VecSetVAE(nn.Module):
             init_scale=self.init_scale,
             qkv_bias=self.qkv_bias,
             use_flash=self.use_flash,
+            use_checkpoint=self.use_checkpoint,
         )
 
         # decoder
@@ -81,6 +85,7 @@ class VecSetVAE(nn.Module):
             init_scale=self.init_scale,
             qkv_bias=self.qkv_bias,
             use_flash=self.use_flash,
+            use_checkpoint=self.use_checkpoint,
         )
         return
 
