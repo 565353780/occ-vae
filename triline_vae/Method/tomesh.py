@@ -16,7 +16,7 @@ def toOCC(qry: torch.Tensor, triline: Triline, model: nn.Module) -> torch.Tensor
     feat = triline.query(qry.to(torch.float32).unsqueeze(0))
     feat = feat.reshape(feat.shape[0], feat.shape[1], 3 * model.feat_dim)
     logits = model.decoder(feat).squeeze(-1)
-    tsdf = nn.Sigmoid()(logits) * 2.0 - 1.0
+    tsdf = torch.tanh(logits) * 2.0 - 1.0
     return tsdf.squeeze(0)
 
 

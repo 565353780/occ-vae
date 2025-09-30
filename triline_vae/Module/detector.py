@@ -1,13 +1,14 @@
 import os
 import torch
 import trimesh
+from torch import nn
 from typing import Union
 
 from triline_vae.Dataset.tsdf import TSDFDataset
 from triline_vae.Model.triline_vae import TrilineVAE
 from triline_vae.Model.triline_vae_v2 import TrilineVAEV2
-
 from triline_vae.Method.tomesh import extractMesh
+from triline_vae.Metric.tsdf import getTSDFAccPos, getTSDFAccNeg
 
 
 class Detector(object):
@@ -82,4 +83,58 @@ class Detector(object):
         sharp_surface = data_dict["sharp_surface"].unsqueeze(0).to(self.device)
 
         mesh = self.detect(coarse_surface, sharp_surface)
+
+        queries = data_dict["rand_points"].unsqueeze(0).to(self.device)
+        gt_tsdf = data_dict["tsdf"].unsqueeze(0).to(self.device)
+        number_sharp = data_dict["number_sharp"]
+
+        triline = self.model.encodeTriline(coarse_surface, sharp_surface)
+        pred_tsdf = self.model.query(queries, triline)
+
+        gt_sharp_tsdf = gt_tsdf[:, :number_sharp]
+        gt_coarse_tsdf = gt_tsdf[:, number_sharp:]
+
+        pred_sharp_tsdf = pred_tsdf[:, :number_sharp]
+        pred_coarse_tsdf = pred_tsdf[:, number_sharp:]
+
+        loss_sharp_tsdf = nn.L1Loss()(pred_sharp_tsdf, gt_sharp_tsdf)
+
+        loss_coarse_tsdf = nn.L1Loss()(pred_coarse_tsdf, gt_coarse_tsdf)
+
+        tsdf_dist_to_unit_dist_scale = 2.0 / 0.015
+        acc_1536_pos = getTSDFAccPos(
+            gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 1536.0
+        )
+        acc_1024_pos = getTSDFAccPos(
+            gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 1024.0
+        )
+        acc_512_pos = getTSDFAccPos(
+            gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 512.0
+        )
+        acc_256_pos = getTSDFAccPos(
+            gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 256.0
+        )
+        acc_1536_neg = getTSDFAccNeg(
+            gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 1536.0
+        )
+        acc_1024_neg = getTSDFAccNeg(
+            gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 1024.0
+        )
+        acc_512_neg = getTSDFAccNeg(
+            gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 512.0
+        )
+        acc_256_neg = getTSDFAccNeg(
+            gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 256.0
+        )
+
+        print("loss_coarse_tsdf:", loss_coarse_tsdf)
+        print("loss_sharp_tsdf:", loss_sharp_tsdf)
+        print("acc_1536_pos:", acc_1536_pos)
+        print("acc_1024_pos:", acc_1024_pos)
+        print("acc_512_pos:", acc_512_pos)
+        print("acc_256_pos:", acc_256_pos)
+        print("acc_1536_neg:", acc_1536_neg)
+        print("acc_1024_neg:", acc_1024_neg)
+        print("acc_512_neg:", acc_512_neg)
+        print("acc_256_neg:", acc_256_neg)
         return mesh

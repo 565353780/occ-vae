@@ -162,7 +162,7 @@ class TrilineVAEV2(nn.Module):
         feat = triline.query(queries)
         feat = feat.reshape(feat.shape[0], feat.shape[1], 3 * self.feat_dim)
         logits = self.decoder(feat).squeeze(-1)
-        tsdf = nn.Sigmoid()(logits) * 2.0 - 1.0
+        tsdf = torch.tanh(logits) * 2.0 - 1.0
         return tsdf
 
     def forward(

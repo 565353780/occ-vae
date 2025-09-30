@@ -9,7 +9,24 @@ from triline_vae.Loss.eikonal import eikonal_loss_fn
 from triline_vae.Model.vecset_vae import VecSetVAE
 from triline_vae.Model.triline_vae import TrilineVAE
 from triline_vae.Model.triline_vae_v2 import TrilineVAEV2
-from triline_vae.Metric.tsdf import getTSDFAcc
+from triline_vae.Metric.tsdf import getTSDFAccPos, getTSDFAccNeg
+
+
+def split_tsdf_loss(loss_fn, pred_tsdf, gt_tsdf):
+    loss_all = loss_fn(pred_tsdf, gt_tsdf)  # element-wise loss
+
+    mask_pos = gt_tsdf >= 0
+    mask_neg = gt_tsdf < 0
+
+    # 避免某一边全空，返回0
+    loss_pos = (
+        loss_all[mask_pos].mean() if mask_pos.any() else pred_tsdf.new_tensor(0.0)
+    )
+    loss_neg = (
+        loss_all[mask_neg].mean() if mask_neg.any() else pred_tsdf.new_tensor(0.0)
+    )
+
+    return loss_pos, loss_neg
 
 
 class Trainer(BaseTrainer):
@@ -42,7 +59,7 @@ class Trainer(BaseTrainer):
 
         self.gt_sample_added_to_logger = False
 
-        self.loss_fn = nn.L1Loss()
+        self.loss_fn = nn.L1Loss(reduction="none")
 
         super().__init__(
             batch_size,
@@ -124,9 +141,18 @@ class Trainer(BaseTrainer):
         pred_sharp_tsdf = pred_tsdf[:, :number_sharp]
         pred_coarse_tsdf = pred_tsdf[:, number_sharp:]
 
-        loss_sharp_tsdf = self.loss_fn(pred_sharp_tsdf, gt_sharp_tsdf)
+        # loss_sharp_tsdf = self.loss_fn(pred_sharp_tsdf, gt_sharp_tsdf)
+        # loss_coarse_tsdf = self.loss_fn(pred_coarse_tsdf, gt_coarse_tsdf)
 
-        loss_coarse_tsdf = self.loss_fn(pred_coarse_tsdf, gt_coarse_tsdf)
+        loss_pos_sharp, loss_neg_sharp = split_tsdf_loss(
+            self.loss_fn, pred_sharp_tsdf, gt_sharp_tsdf
+        )
+        loss_pos_coarse, loss_neg_coarse = split_tsdf_loss(
+            self.loss_fn, pred_coarse_tsdf, gt_coarse_tsdf
+        )
+
+        loss_sharp_tsdf = loss_pos_sharp + loss_neg_sharp
+        loss_coarse_tsdf = loss_pos_coarse + loss_neg_coarse
 
         loss_kl = torch.mean(kl)
 
@@ -144,18 +170,32 @@ class Trainer(BaseTrainer):
         tsdf_dist_to_unit_dist_scale = 2.0 / 0.015
         loss_dict = {
             "Loss": loss,
-            "LossSharpTSDF": loss_sharp_tsdf,
-            "LossCoarseTSDF": loss_coarse_tsdf,
-            "Acc@1536": getTSDFAcc(
+            "LossCoarseTSDF+": loss_pos_coarse,
+            "LossCoarseTSDF-": loss_neg_coarse,
+            "LossSharpTSDF+": loss_pos_sharp,
+            "LossSharpTSDF-": loss_neg_sharp,
+            "Acc@1536+": getTSDFAccPos(
                 gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 1536.0
             ),
-            "Acc@1024": getTSDFAcc(
+            "Acc@1536-": getTSDFAccNeg(
+                gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 1536.0
+            ),
+            "Acc@1024+": getTSDFAccPos(
                 gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 1024.0
             ),
-            "Acc@512": getTSDFAcc(
+            "Acc@1024-": getTSDFAccNeg(
+                gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 1024.0
+            ),
+            "Acc@512+": getTSDFAccPos(
                 gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 512.0
             ),
-            "Acc@256": getTSDFAcc(
+            "Acc@512-": getTSDFAccNeg(
+                gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 512.0
+            ),
+            "Acc@256+": getTSDFAccPos(
+                gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 256.0
+            ),
+            "Acc@256-": getTSDFAccNeg(
                 gt_tsdf, pred_tsdf, tsdf_dist_to_unit_dist_scale / 256.0
             ),
             "LossKL": loss_kl,
