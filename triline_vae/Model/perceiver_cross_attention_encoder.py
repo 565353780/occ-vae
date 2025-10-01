@@ -5,6 +5,7 @@ from einops import repeat
 from typing import Optional
 from torch_cluster import fps
 
+from triline_vae.Model.Layer.fp32_layer_norm import FP32LayerNorm
 from triline_vae.Model.transformer.attention import ResidualCrossAttentionBlock
 from triline_vae.Model.Layer.fourier_embedder import FourierEmbedder
 from triline_vae.Model.transformer.perceiver_1d import Perceiver
@@ -74,7 +75,7 @@ class PerceiverCrossAttentionEncoder(nn.Module):
         )
 
         if use_ln_post:
-            self.ln_post = nn.LayerNorm(width)
+            self.ln_post = FP32LayerNorm(width)
         else:
             self.ln_post = None
 

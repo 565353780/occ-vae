@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
 
+from triline_vae.Model.Layer.fp32_layer_norm import FP32LayerNorm
 from triline_vae.Model.transformer.utils import init_linear, MLP
 from triline_vae.Model.checkpoint import checkpoint
 
@@ -96,9 +97,9 @@ class ResidualAttentionBlock(nn.Module):
             qkv_bias=qkv_bias,
             use_flash=use_flash,
         )
-        self.ln_1 = nn.LayerNorm(width)
+        self.ln_1 = FP32LayerNorm(width)
         self.mlp = MLP(width=width, init_scale=init_scale)
-        self.ln_2 = nn.LayerNorm(width)
+        self.ln_2 = FP32LayerNorm(width)
 
     def _forward(self, x: torch.Tensor):  # 103，256，768
         x = x + self.attn(self.ln_1(x))  # 103，256，768
@@ -209,10 +210,10 @@ class ResidualCrossAttentionBlock(nn.Module):
             qkv_bias=qkv_bias,
             use_flash=use_flash,
         )
-        self.ln_1 = nn.LayerNorm(width)
-        self.ln_2 = nn.LayerNorm(data_width)
+        self.ln_1 = FP32LayerNorm(width)
+        self.ln_2 = FP32LayerNorm(data_width)
         self.mlp = MLP(width=width, init_scale=init_scale)
-        self.ln_3 = nn.LayerNorm(width)
+        self.ln_3 = FP32LayerNorm(width)
 
     def _forward(self, x: torch.Tensor, data: torch.Tensor):
         x = x + self.attn(

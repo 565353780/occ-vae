@@ -32,7 +32,7 @@ class Detector(object):
 
         self.tsdf_dataset = TSDFDataset(
             "/home/chli/chLi/Dataset/",
-            "Objaverse_82K/sharp_edge_sdf/",
+            "Objaverse_82K/sharp_edge_sdf",
             split="val",
             n_supervision=[21384, 10000, 10000],
         )

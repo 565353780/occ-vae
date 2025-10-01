@@ -145,16 +145,16 @@ class Trainer(BaseTrainer):
         # loss_coarse_tsdf = self.loss_fn(pred_coarse_tsdf, gt_coarse_tsdf)
 
         loss_pos_sharp, loss_neg_sharp = split_tsdf_loss(
-            self.loss_fn, pred_sharp_tsdf, gt_sharp_tsdf
+            self.loss_fn, pred_sharp_tsdf.float(), gt_sharp_tsdf.float()
         )
         loss_pos_coarse, loss_neg_coarse = split_tsdf_loss(
-            self.loss_fn, pred_coarse_tsdf, gt_coarse_tsdf
+            self.loss_fn, pred_coarse_tsdf.float(), gt_coarse_tsdf.float()
         )
 
         loss_sharp_tsdf = loss_pos_sharp + loss_neg_sharp
         loss_coarse_tsdf = loss_pos_coarse + loss_neg_coarse
 
-        loss_kl = torch.mean(kl)
+        loss_kl = torch.mean(kl.float())
 
         # lambda_eikonal = 1.0
         # queries = data_dict["rand_points"]

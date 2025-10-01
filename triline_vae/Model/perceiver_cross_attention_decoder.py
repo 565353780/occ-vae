@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+from triline_vae.Model.Layer.fp32_layer_norm import FP32LayerNorm
 from triline_vae.Model.checkpoint import checkpoint
 from triline_vae.Model.Layer.fourier_embedder import FourierEmbedder
 from triline_vae.Model.transformer.attention import ResidualCrossAttentionBlock
@@ -36,7 +37,7 @@ class PerceiverCrossAttentionDecoder(nn.Module):
             use_checkpoint=use_checkpoint,
         )
 
-        self.ln_post = nn.LayerNorm(width)
+        self.ln_post = FP32LayerNorm(width)
         self.output_proj = nn.Linear(width, out_dim)
 
     def _forward(self, queries: torch.FloatTensor, latents: torch.FloatTensor):

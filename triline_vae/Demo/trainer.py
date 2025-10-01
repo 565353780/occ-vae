@@ -19,12 +19,12 @@ def demo():
     batch_size = 64
     accum_iter = 4
     num_workers = min(16, batch_size)
-    model_file_path = "./output/v2/model_last.pth"
-    model_file_path = None
+    model_file_path = "./output/vecset-64x64-v1/model_last.pth"
+    # model_file_path = None
     weights_only = False
     device = "auto"
-    dtype = torch.float16
-    warm_step_num = 2000
+    dtype = torch.bfloat16
+    warm_step_num = 200
     finetune_step_num = -1
     lr = 1e-5
     lr_batch_size = 256
