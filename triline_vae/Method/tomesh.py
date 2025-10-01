@@ -12,17 +12,16 @@ from triline_vae.Model.triline import Triline
 
 
 @torch.no_grad()
-def toOCC(qry: torch.Tensor, triline: Triline, model: nn.Module) -> torch.Tensor:
-    feat = triline.query(qry.to(torch.float32).unsqueeze(0))
-    feat = feat.reshape(feat.shape[0], feat.shape[1], 3 * model.feat_dim)
-    logits = model.decoder(feat).squeeze(-1)
-    tsdf = torch.tanh(logits) * 2.0 - 1.0
-    return tsdf.squeeze(0)
+def toOCC(qry: torch.Tensor, latents: torch.Tensor, model: nn.Module) -> torch.Tensor:
+    queries = qry.unsqueeze(0).to(torch.float32)
+    logits = model.decoder(queries, latents).squeeze(-1)
+    tsdf = logits.squeeze(0)
+    return tsdf
 
 
 @torch.no_grad()
 def extractMesh(
-    triline: Triline,
+    latents,
     model: nn.Module,
     resolution: int = 128,
     batch_size: int = 1200000,
@@ -30,13 +29,13 @@ def extractMesh(
 ) -> trimesh.Trimesh:
     assert mode in ["odc", "mc"]
 
-    device = triline.feats.device
+    device = latents.device
 
     if mode == "odc":
         odc = occupancy_dual_contouring(device)
 
         vertices, triangles = odc.extract_mesh(
-            imp_func=partial(toOCC, triline=triline, model=model),
+            imp_func=partial(toOCC, latents=latents, model=model),
             min_coord=[-1.05, -1.05, -1.05],
             max_coord=[1.05, 1.05, 1.05],
             num_grid=resolution,

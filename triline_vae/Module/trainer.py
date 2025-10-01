@@ -87,7 +87,7 @@ class Trainer(BaseTrainer):
         return
 
     def createDatasets(self) -> bool:
-        eval = True
+        eval = False
         self.dataloader_dict["tsdf"] = {
             "dataset": TSDFDataset(
                 self.dataset_root_folder_path,
@@ -116,7 +116,7 @@ class Trainer(BaseTrainer):
         return True
 
     def createModel(self) -> bool:
-        mode = 2
+        mode = 3
         if mode == 1:
             self.model = TrilineVAE().to(self.device)
         elif mode == 2:

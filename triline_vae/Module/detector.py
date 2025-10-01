@@ -7,6 +7,7 @@ from typing import Union
 from triline_vae.Dataset.tsdf import TSDFDataset
 from triline_vae.Model.triline_vae import TrilineVAE
 from triline_vae.Model.triline_vae_v2 import TrilineVAEV2
+from triline_vae.Model.vecset_vae import VecSetVAE
 from triline_vae.Method.tomesh import extractMesh
 from triline_vae.Metric.tsdf import getTSDFAccPos, getTSDFAccNeg
 
@@ -24,7 +25,7 @@ class Detector(object):
         self.resolution = resolution
         self.device = device
 
-        self.model = TrilineVAEV2().to(self.device)
+        self.model = VecSetVAE().to(self.device)
 
         if model_file_path is not None:
             self.loadModel(model_file_path, use_ema)
@@ -65,9 +66,12 @@ class Detector(object):
         coarse_surface: torch.Tensor,
         sharp_surface: torch.Tensor,
     ) -> Union[trimesh.Trimesh, None]:
-        triline = self.model.encodeTriline(coarse_surface, sharp_surface)
+        shape_latents = self.model.encode(coarse_surface, sharp_surface)
+        kl_embed, _ = self.model.encode_kl_embed(shape_latents, sample_posterior=False)
+        latents = self.model.decode(kl_embed)
+        # triline = self.model.encodeTriline(coarse_surface, sharp_surface)
         mesh = extractMesh(
-            triline,
+            latents,
             self.model,
             self.resolution,
             self.batch_size,
@@ -88,8 +92,11 @@ class Detector(object):
         gt_tsdf = data_dict["tsdf"].unsqueeze(0).to(self.device)
         number_sharp = data_dict["number_sharp"]
 
-        triline = self.model.encodeTriline(coarse_surface, sharp_surface)
-        pred_tsdf = self.model.query(queries, triline)
+        shape_latents = self.model.encode(coarse_surface, sharp_surface)
+        kl_embed, _ = self.model.encode_kl_embed(shape_latents, sample_posterior=False)
+        latents = self.model.decode(kl_embed)
+        # triline = self.model.encodeTriline(coarse_surface, sharp_surface)
+        pred_tsdf = self.model.query(queries, latents)
 
         gt_sharp_tsdf = gt_tsdf[:, :number_sharp]
         gt_coarse_tsdf = gt_tsdf[:, number_sharp:]

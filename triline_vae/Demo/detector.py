@@ -6,7 +6,7 @@ from triline_vae.Module.detector import Detector
 
 
 def demo():
-    model_file_path = "./output/v2/model_last.pth"
+    model_file_path = "./output/v3/model_last.pth"
     use_ema = False
     batch_size = 1200000
     resolution = 128
@@ -23,4 +23,6 @@ def demo():
     mesh = detector.detectDataset(0)
 
     print(mesh)
+
+    mesh.show()
     return True

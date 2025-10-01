@@ -19,18 +19,16 @@ class VecSetVAE(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-        self.feat_dim: int = 256
-
         self.use_downsample: bool = True
-        self.num_latents: int = 256
+        self.num_latents: int = 64
         self.embed_dim: int = 64
-        self.width: int = 3 * self.feat_dim
+        self.width: int = 64
         self.point_feats: int = 3
         self.embed_point_feats: bool = False
         self.out_dim: int = 1
         self.num_freqs: int = 8
         self.include_pi: bool = False
-        self.heads: int = 12
+        self.heads: int = 8
         self.num_encoder_layers: int = 8
         self.num_decoder_layers: int = 16
         self.init_scale: float = 0.25
