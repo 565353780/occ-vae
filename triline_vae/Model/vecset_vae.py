@@ -16,32 +16,55 @@ from triline_vae.Model.perceiver_cross_attention_decoder import (
 
 
 class VecSetVAE(nn.Module):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        use_downsample: bool = True,
+        num_latents: int = 64,
+        embed_dim: int = 64,
+        width: int = 768,
+        point_feats: int = 3,
+        embed_point_feats: bool = False,
+        query_dim: int = 3,
+        out_dim: int = 1,
+        num_freqs: int = 8,
+        include_pi: bool = False,
+        heads: int = 12,
+        num_encoder_layers: int = 8,
+        num_decoder_layers: int = 16,
+        init_scale: float = 0.25,
+        qkv_bias: bool = False,
+        use_ln_post: bool = True,
+        use_flash: bool = True,
+        use_checkpoint: bool = True,
+        split: str = "val",
+    ) -> None:
         super().__init__()
 
-        self.use_downsample: bool = True
-        self.num_latents: int = 64
-        self.embed_dim: int = 64
-        self.width: int = 64
-        self.point_feats: int = 3
-        self.embed_point_feats: bool = False
-        self.out_dim: int = 1
-        self.num_freqs: int = 8
-        self.include_pi: bool = False
-        self.heads: int = 8
-        self.num_encoder_layers: int = 8
-        self.num_decoder_layers: int = 16
-        self.init_scale: float = 0.25
-        self.qkv_bias: bool = False
-        self.use_ln_post: bool = True
-        self.use_flash: bool = True
-        self.use_checkpoint: bool = True
-        self.split = "val"
+        self.use_downsample = use_downsample
+        self.num_latents = num_latents
+        self.embed_dim = embed_dim
+        self.width = width
+        self.point_feats = point_feats
+        self.embed_point_feats = embed_point_feats
+        self.query_dim = query_dim
+        self.out_dim = out_dim
+        self.num_freqs = num_freqs
+        self.include_pi = include_pi
+        self.heads = heads
+        self.num_encoder_layers = num_encoder_layers
+        self.num_decoder_layers = num_decoder_layers
+        self.init_scale = init_scale
+        self.qkv_bias = qkv_bias
+        self.use_ln_post = use_ln_post
+        self.use_flash = use_flash
+        self.use_checkpoint = use_checkpoint
+        self.split = split
 
         self.embedder = FourierEmbedder(
             num_freqs=self.num_freqs,
             include_pi=self.include_pi,
         )
+
         self.init_scale = self.init_scale * math.sqrt(1.0 / self.width)
         self.encoder = PerceiverCrossAttentionEncoder(
             use_downsample=self.use_downsample,
@@ -74,17 +97,35 @@ class VecSetVAE(nn.Module):
         )
 
         # decoder
-        self.decoder = PerceiverCrossAttentionDecoder(
-            embedder=self.embedder,
-            out_dim=self.out_dim,
-            num_latents=self.num_latents,
-            width=self.width,
-            heads=self.heads,
-            init_scale=self.init_scale,
-            qkv_bias=self.qkv_bias,
-            use_flash=self.use_flash,
-            use_checkpoint=self.use_checkpoint,
-        )
+        if self.query_dim == 3:
+            self.decoder = PerceiverCrossAttentionDecoder(
+                embedder=self.embedder,
+                out_dim=self.out_dim,
+                num_latents=self.num_latents,
+                width=self.width,
+                heads=self.heads,
+                init_scale=self.init_scale,
+                qkv_bias=self.qkv_bias,
+                use_flash=self.use_flash,
+                use_checkpoint=self.use_checkpoint,
+            )
+        else:
+            self.decode_embedder = FourierEmbedder(
+                num_freqs=self.num_freqs,
+                input_dim=self.query_dim,
+                include_pi=self.include_pi,
+            )
+            self.decoder = PerceiverCrossAttentionDecoder(
+                embedder=self.decode_embedder,
+                out_dim=self.out_dim,
+                num_latents=self.num_latents,
+                width=self.width,
+                heads=self.heads,
+                init_scale=self.init_scale,
+                qkv_bias=self.qkv_bias,
+                use_flash=self.use_flash,
+                use_checkpoint=self.use_checkpoint,
+            )
         return
 
     def encode(
@@ -157,10 +198,17 @@ class VecSetVAE(nn.Module):
         sharp_surface = data_dict["sharp_surface"]
         queries = data_dict["rand_points"]
         self.split = data_dict["split"]
+        sample_posterior = data_dict["sample_posterior"]
+
+        if "coarse_tsdf" in data_dict.keys():
+            coarse_tsdf = data_dict["coarse_tsdf"]
+            queries = torch.cat([queries, coarse_tsdf.unsqueeze(-1)], dim=-1)
 
         shape_latents = self.encode(coarse_surface, sharp_surface)
 
-        kl_embed, kl = self.encode_kl_embed(shape_latents, sample_posterior=True)
+        kl_embed, kl = self.encode_kl_embed(
+            shape_latents, sample_posterior=sample_posterior
+        )
 
         latents = self.decode(kl_embed)
 
@@ -172,3 +220,54 @@ class VecSetVAE(nn.Module):
         }
 
         return result_dict
+
+
+def build_dora_vae(num_latents: int = 64) -> nn.Module:
+    return VecSetVAE(
+        use_downsample=True,
+        num_latents=num_latents,
+        embed_dim=64,
+        width=768,
+        point_feats=3,
+        embed_point_feats=False,
+        query_dim=3,
+        out_dim=1,
+        num_freqs=8,
+        include_pi=False,
+        heads=12,
+        num_encoder_layers=8,
+        num_decoder_layers=16,
+        init_scale=0.25,
+        qkv_bias=False,
+        use_ln_post=True,
+        use_flash=True,
+        use_checkpoint=True,
+        split="val",
+    )
+
+
+def build_refine_vae(
+    num_latents: int = 64,
+    embed_dim: int = 64,
+) -> nn.Module:
+    return VecSetVAE(
+        use_downsample=True,
+        num_latents=num_latents,
+        embed_dim=embed_dim,
+        width=768,
+        point_feats=3,
+        embed_point_feats=False,
+        query_dim=4,
+        out_dim=1,
+        num_freqs=8,
+        include_pi=False,
+        heads=12,
+        num_encoder_layers=8,
+        num_decoder_layers=16,
+        init_scale=0.25,
+        qkv_bias=False,
+        use_ln_post=True,
+        use_flash=True,
+        use_checkpoint=True,
+        split="val",
+    )

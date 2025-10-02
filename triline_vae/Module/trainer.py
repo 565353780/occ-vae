@@ -1,3 +1,4 @@
+import os
 import torch
 from torch import nn
 from typing import Union
@@ -7,6 +8,7 @@ from base_trainer.Module.base_trainer import BaseTrainer
 from triline_vae.Dataset.tsdf import TSDFDataset
 from triline_vae.Loss.eikonal import eikonal_loss_fn
 from triline_vae.Model.vecset_vae import VecSetVAE
+from triline_vae.Model.detailed_vecset_vae import DetailedVecSetVAE
 from triline_vae.Model.triline_vae import TrilineVAE
 from triline_vae.Model.triline_vae_v2 import TrilineVAEV2
 from triline_vae.Metric.tsdf import getTSDFAccPos, getTSDFAccNeg
@@ -116,13 +118,23 @@ class Trainer(BaseTrainer):
         return True
 
     def createModel(self) -> bool:
-        mode = 3
+        mode = 4
         if mode == 1:
             self.model = TrilineVAE().to(self.device)
         elif mode == 2:
             self.model = TrilineVAEV2().to(self.device)
         elif mode == 3:
             self.model = VecSetVAE().to(self.device)
+        elif mode == 4:
+            self.model = DetailedVecSetVAE(
+                [
+                    [64, 64],
+                ],
+            ).to(self.device)
+            dora_pretrained_model_file_path = (
+                "/home/chli/chLi/Model/Dora/dora_vae_1_1.pth"
+            )
+            self.model.loadDoraVAE(dora_pretrained_model_file_path)
         return True
 
     def getLossDict(self, data_dict: dict, result_dict: dict) -> dict:
